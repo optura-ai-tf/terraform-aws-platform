@@ -1,0 +1,54 @@
+# tfsec configuration for AWS EKS infrastructure
+# This file defines rule exclusions with justifications for AWS resources
+
+exclude:
+  # ===== AWS Critical Warnings =====
+
+  # aws-eks-no-public-cluster-access
+  # Justification: Private cluster access via Teleport/VPN (see ../ACCESS.md).
+  # Public access is temporarily enabled during initial deployment for TFC agent
+  # and Teleport setup, then disabled via private_cluster_enabled = true.
+  - aws-eks-no-public-cluster-access
+
+  # aws-eks-no-public-cluster-access-to-cidr
+  # Justification: Related to above. Public CIDR access is controlled by
+  # api_server_authorized_cidrs and disabled via private_cluster_enabled = true.
+  - aws-eks-no-public-cluster-access-to-cidr
+
+  # aws-ec2-no-public-egress-sgr
+  # Justification: EKS node security group requires unrestricted egress for:
+  # - Kubernetes API communication
+  # - Container image pulls from public registries
+  # - Package updates and system operations
+  # - Application workload internet access
+  # This is standard practice for EKS node groups.
+  - aws-ec2-no-public-egress-sgr
+
+  # ===== AWS High/Medium Warnings =====
+
+  # aws-iam-no-policy-wildcards
+  # Justification: AWS Cluster Autoscaler requires wildcard permissions for
+  # discovery and scaling operations. These are standard AWS-documented permissions.
+  # See: https://github.com/kubernetes/autoscaler/blob/master/cluster-autoscaler/cloudprovider/aws/README.md
+  - aws-iam-no-policy-wildcards
+
+  # aws-ec2-no-public-ip-subnet
+  # Justification: Public subnets are intentionally designed for NAT Gateways,
+  # ALB/NLB, and bastion hosts. EKS nodes are in private subnets.
+  - aws-ec2-no-public-ip-subnet
+
+  # aws-rds-enable-iam-auth
+  # Justification: Using traditional password authentication with secrets management.
+  # RDS instances are private-only with security groups restricting access.
+  - aws-rds-enable-iam-auth
+
+  # aws-s3-enable-bucket-logging
+  # Justification: The logging bucket stores Loki logs - enabling S3 access logs
+  # would create circular dependency. Storage bucket contains application data
+  # that doesn't require access logging (object operations logged via CloudTrail).
+  - aws-s3-enable-bucket-logging
+
+  # aws-ec2-require-vpc-flow-logs-for-all-vpcs
+  # Justification: VPC Flow Logs disabled to reduce costs in non-production.
+  # Can be enabled per-environment via variable if network troubleshooting needed.
+  - aws-ec2-require-vpc-flow-logs-for-all-vpcs
