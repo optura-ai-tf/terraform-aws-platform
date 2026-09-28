@@ -6,6 +6,89 @@ form `aws/platform/vX.Y.Z`.
 
 ## Unreleased
 
+## 0.5.4 — 2026-09-28
+
+### Fixed
+
+- **VPC CNI addon: corrected `AWS_VPC_K8S_CNI_EXTERNAL_SNAT` to `AWS_VPC_K8S_CNI_EXTERNALSNAT`.**
+  The env var set on the `vpc-cni` addon's `configuration_values` when
+  `pod_isolation_enabled = true` was misspelled with an extra underscore — the
+  real VPC CNI variable has never had one. Addon versions that validate
+  `configuration_values` against the CNI's JSON schema reject the misspelled
+  key outright (`ConfigurationValue provided in request is not supported`),
+  failing `aws_eks_addon.vpc_cni` at apply. Only affects deployments with
+  `pod_isolation_enabled = true`; deployments with it `false` never send this
+  key and are unaffected. No input or output changes — just the corrected env
+  var name.
+
+## 0.5.3 — 2026-09-21
+
+### Changed
+
+- **`scope_down.exempt_when_header` is now `exempt_when_headers`**, a map of
+  header name to exact value, so an exemption can require more than one header.
+  Released in 0.5.2 as a single `{ name, value }` object; renamed before any
+  consumer adopted it.
+
+  Every condition — the IP list and each header — must match for a request to
+  be exempt, so each one added narrows the exemption further. Two or more
+  render a negated `and_statement`; a lone condition nests directly under the
+  `not_statement`, since WAF requires at least two statements in an
+  `and_statement`. Header values must be non-empty, and names must be unique
+  after lowercasing — WAF matches header names case-insensitively, so `Host`
+  and `host` would otherwise render two conditions on the same header that can
+  never both match, silently disabling the exemption.
+
+  ```hcl
+  scope_down = {
+    exempt_when_ips = ["198.51.100.0/28"]
+    exempt_when_headers = {
+      "Host"       = "app.example.com"
+      "User-Agent" = "my-test-harness/1"
+    }
+  }
+  ```
+
+  Motivating case: pinning a CI exemption to the runner egress IPs, the host CI
+  is allowed to reach, *and* the harness's own User-Agent — so other jobs
+  sharing those runners do not inherit it. Headers remain client-supplied and
+  are for narrowing an exemption, never for authenticating it.
+
+## 0.5.2 — 2026-09-21
+
+### Added
+
+- **`waf_web_acls[*].managed_rule_groups[*].scope_down`** — narrow which requests
+  a managed rule group inspects, so known-good traffic can skip **that one
+  group** while every other group and rate limit in the ACL still applies.
+
+  ```hcl
+  { name = "AWSManagedRulesAnonymousIpList", priority = 70,
+    scope_down = {
+      exempt_when_ips    = ["198.51.100.0/28"]
+      exempt_when_header = { name = "Host", value = "app.example.com" }
+    } }
+  ```
+
+  Set either condition or both; both means the request must match **both** to be
+  exempt. Note that a header is client-supplied, so `exempt_when_header` alone
+  is not a trust boundary — pair it with `exempt_when_ips` when the exemption
+  itself must be trustworthy. The module renders a negated `and_statement` (or the single condition
+  directly — WAF requires at least two statements in an `and_statement`), and
+  creates an `aws_wafv2_ip_set` per group that uses `exempt_when_ips`, keyed
+  `<acl>/<group>` so the same group name in two ACLs cannot collide. Header
+  values are matched case-insensitively.
+
+  **Use this rather than an allow rule.** An allow rule terminates evaluation,
+  so the exempted traffic would skip CRS, SQLi, KnownBadInputs and the rate
+  limits as well. A scope-down narrows exactly one group and nothing else.
+
+  Motivating case: GitHub-hosted CI runners egress from cloud provider ranges
+  and are blocked by `AWSManagedRulesAnonymousIpList` / `HostingProviderIPList`.
+  Exempting the runners' static egress IPs, qualified by the `Host` they are
+  allowed to reach, lets CI through that group while everything else still
+  inspects it. Entries without `scope_down` are completely unaffected.
+
 ## 0.5.0 — 2026-08-06
 
 ### Added

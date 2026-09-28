@@ -16,7 +16,7 @@ locals {
       # the node subnet range and never the non-routed 100.64 pod CIDR. "false"
       # is the CNI default (SNAT on), but it is load-bearing for that contract,
       # so pin it explicitly to guard against default drift or inherited config.
-      AWS_VPC_K8S_CNI_EXTERNAL_SNAT = "false"
+      AWS_VPC_K8S_CNI_EXTERNALSNAT = "false"
     } : {},
     var.cni_prefix_delegation_enabled ? {
       ENABLE_PREFIX_DELEGATION = "true"

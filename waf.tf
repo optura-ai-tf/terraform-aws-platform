@@ -26,6 +26,18 @@ locals {
     }
   ]...)
 
+  # One IP set per managed rule group that exempts by IP. Keyed "<acl>/<group>"
+  # so the same group name used in two ACLs cannot collide, matching waf_ip_sets.
+  waf_scope_down_ip_sets = merge([
+    for acl_key, acl in var.waf_web_acls : {
+      for g in acl.managed_rule_groups : "${acl_key}/${g.name}" => {
+        addresses = g.scope_down.exempt_when_ips
+        scope     = acl.scope
+      }
+      if try(g.scope_down.exempt_when_ips, null) != null
+    }
+  ]...)
+
   waf_log_groups = {
     for acl_key, acl in var.waf_web_acls : acl_key => acl
     if acl.logging.enabled && acl.logging.destination_arn == null
@@ -59,6 +71,17 @@ resource "aws_wafv2_ip_set" "main" {
   addresses          = each.value.addresses
 
   tags = merge(local.common_tags, { Name = "${local.name_prefix}-${replace(each.key, "/", "-")}" })
+}
+
+resource "aws_wafv2_ip_set" "scope_down" {
+  for_each = local.waf_scope_down_ip_sets
+
+  name               = "${local.name_prefix}-${replace(each.key, "/", "-")}-scope-down"
+  scope              = each.value.scope
+  ip_address_version = "IPV4"
+  addresses          = each.value.addresses
+
+  tags = merge(local.common_tags, { Name = "${local.name_prefix}-${replace(each.key, "/", "-")}-scope-down" })
 }
 
 resource "aws_wafv2_web_acl" "main" {
@@ -181,6 +204,88 @@ resource "aws_wafv2_web_acl" "main" {
                 dynamic "count" {
                   for_each = rule_action_override.value.action_to_use == "count" ? [1] : []
                   content {}
+                }
+              }
+            }
+          }
+
+          # Evaluate this group for everything EXCEPT requests matching EVERY
+          # condition in scope_down — a negated AND, so each extra condition
+          # narrows the exemption. Narrowing the group beats a standalone allow
+          # rule, which terminates evaluation and would let the exempted traffic
+          # skip every other group in the ACL too.
+          #
+          # WAF's and_statement requires >= 2 statements, so a lone condition is
+          # nested directly under not_statement instead.
+          dynamic "scope_down_statement" {
+            for_each = rule.value.scope_down == null ? [] : [rule.value.scope_down]
+
+            content {
+              not_statement {
+                statement {
+                  dynamic "and_statement" {
+                    for_each = ((scope_down_statement.value.exempt_when_ips == null ? 0 : 1) + length(coalesce(scope_down_statement.value.exempt_when_headers, {}))) >= 2 ? [1] : []
+
+                    content {
+                      dynamic "statement" {
+                        for_each = scope_down_statement.value.exempt_when_ips == null ? [] : [1]
+                        content {
+                          ip_set_reference_statement {
+                            arn = aws_wafv2_ip_set.scope_down["${each.key}/${rule.value.name}"].arn
+                          }
+                        }
+                      }
+
+                      dynamic "statement" {
+                        for_each = coalesce(scope_down_statement.value.exempt_when_headers, {})
+                        content {
+                          byte_match_statement {
+                            positional_constraint = "EXACTLY"
+                            # LOWERCASE transforms the inspected header, not the
+                            # literal, so the literal is lowered to match it.
+                            search_string = lower(statement.value)
+
+                            field_to_match {
+                              single_header {
+                                name = lower(statement.key)
+                              }
+                            }
+
+                            text_transformation {
+                              priority = 0
+                              type     = "LOWERCASE"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+
+                  dynamic "ip_set_reference_statement" {
+                    for_each = (scope_down_statement.value.exempt_when_ips != null && length(coalesce(scope_down_statement.value.exempt_when_headers, {})) == 0) ? [1] : []
+                    content {
+                      arn = aws_wafv2_ip_set.scope_down["${each.key}/${rule.value.name}"].arn
+                    }
+                  }
+
+                  dynamic "byte_match_statement" {
+                    for_each = scope_down_statement.value.exempt_when_ips == null && length(coalesce(scope_down_statement.value.exempt_when_headers, {})) == 1 ? coalesce(scope_down_statement.value.exempt_when_headers, {}) : {}
+                    content {
+                      positional_constraint = "EXACTLY"
+                      search_string         = lower(byte_match_statement.value)
+
+                      field_to_match {
+                        single_header {
+                          name = lower(byte_match_statement.key)
+                        }
+                      }
+
+                      text_transformation {
+                        priority = 0
+                        type     = "LOWERCASE"
+                      }
+                    }
+                  }
                 }
               }
             }

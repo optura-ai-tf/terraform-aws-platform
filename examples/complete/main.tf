@@ -129,8 +129,27 @@ module "platform" {
         { name = "AWSManagedRulesLinuxRuleSet", priority = 40 },
         { name = "AWSManagedRulesUnixRuleSet", priority = 50 },
         { name = "AWSManagedRulesAmazonIpReputationList", priority = 60 },
-        { name = "AWSManagedRulesAnonymousIpList", priority = 70 },
-        { name = "AWSManagedRulesAdminProtectionRuleSet", priority = 80 },
+        # scope_down, multi-condition: inspect everything except requests from
+        # these IPs, to this host, from this client. Every condition must match,
+        # so each one narrows the exemption. Renders a negated and_statement.
+        {
+          name     = "AWSManagedRulesAnonymousIpList"
+          priority = 70
+          scope_down = {
+            exempt_when_ips = ["198.51.100.0/28"]
+            exempt_when_headers = {
+              "Host"       = "app.example.com"
+              "User-Agent" = "my-test-harness/1"
+            }
+          }
+        },
+        # scope_down, single condition: nested directly under not_statement,
+        # since WAF requires at least two statements in an and_statement.
+        {
+          name       = "AWSManagedRulesAdminProtectionRuleSet"
+          priority   = 80
+          scope_down = { exempt_when_headers = { "Host" = "admin.example.com" } }
+        },
       ]
 
       logging = { enabled = true, only_blocked = true }

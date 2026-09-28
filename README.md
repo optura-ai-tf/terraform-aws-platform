@@ -679,6 +679,57 @@ alb.ingress.kubernetes.io/wafv2-acl-arn: <arn>   # regional WAFv2 only
 Use `associate_resource_arns` only for load balancers provisioned outside the
 controller (the module then creates the `aws_wafv2_web_acl_association` for you).
 
+#### Narrowing a managed rule group (`scope_down`)
+
+A managed rule group inspects every request by default. When a group has a
+false positive on traffic you trust, `scope_down` exempts that traffic from
+**that group alone**:
+
+```hcl
+managed_rule_groups = [
+  { name = "AWSManagedRulesAnonymousIpList", priority = 70,
+    scope_down = {
+      exempt_when_ips = ["198.51.100.0/28", "203.0.113.0/28"]
+      exempt_when_headers = {
+        "Host"       = "app.example.com"
+        "User-Agent" = "my-test-harness/1"
+      }
+    } },
+]
+```
+
+`exempt_when_headers` maps header name to exact value. Every condition set —
+the IP list and each header — must match for a request to be exempt, so **each
+one you add narrows the exemption**. The example above reads as "inspect
+everything except requests from these IPs, addressed to this host, from this
+client". Comparison is case-insensitive on both name and value.
+
+At least one condition is required. Two or more render a negated
+`and_statement`; a lone condition nests directly under the `not_statement`,
+because WAF requires at least two statements in an `and_statement`.
+
+> **Headers alone are not a trust boundary.** They are supplied by the client,
+> so `exempt_when_headers` on its own lets anyone who sends those values skip
+> the group. They are the right tool for *narrowing* an exemption — to a
+> hostname, a route, a particular caller — but pair them with
+> `exempt_when_ips` whenever the exemption itself has to be trustworthy.
+
+`exempt_when_ips` creates the `aws_wafv2_ip_set` for you, keyed
+`<acl>/<group>` so the same group name in two ACLs cannot collide.
+
+**Reach for this instead of an allow rule.** An allow rule is terminating: the
+traffic it matches skips CRS, SQLi, KnownBadInputs, AdminProtection and every
+rate-based rule as well, which is almost never what you want. A scope-down
+narrows one group and leaves the rest of the ACL enforcing.
+
+The common case is CI. GitHub-hosted runners egress from cloud provider ranges,
+so `AWSManagedRulesAnonymousIpList` blocks them via `HostingProviderIPList`.
+Exempting the runners' static egress IPs, qualified by the `Host` they may
+reach and the `User-Agent` the harness sends, unblocks CI without weakening the
+group for anyone else. The `Host` keeps the exemption from following the ACL
+onto other ingresses if it is ever attached more widely; the `User-Agent` keeps
+it to the one workload, so other jobs sharing those runners do not inherit it.
+
 #### Scope: regional vs edge
 
 | | `scope = "REGIONAL"` (default) | `scope = "CLOUDFRONT"` |
@@ -1151,6 +1202,7 @@ No modules.
 | [aws_vpc_endpoint.sts](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/vpc_endpoint) | resource |
 | [aws_vpc_ipv4_cidr_block_association.pods](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/vpc_ipv4_cidr_block_association) | resource |
 | [aws_wafv2_ip_set.main](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/wafv2_ip_set) | resource |
+| [aws_wafv2_ip_set.scope_down](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/wafv2_ip_set) | resource |
 | [aws_wafv2_web_acl.main](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/wafv2_web_acl) | resource |
 | [aws_wafv2_web_acl_association.direct](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/wafv2_web_acl_association) | resource |
 | [aws_wafv2_web_acl_logging_configuration.main](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/wafv2_web_acl_logging_configuration) | resource |
@@ -1245,6 +1297,7 @@ No modules.
 | <a name="input_enable_vpc_endpoints"></a> [enable\_vpc\_endpoints](#input\_enable\_vpc\_endpoints) | Enable VPC endpoints for S3, ECR, EC2 | `bool` | `true` | no |
 | <a name="input_environment"></a> [environment](#input\_environment) | Environment name (dev, stg, uat, prod) | `string` | n/a | yes |
 | <a name="input_expose_database_to_transit_gateway"></a> [expose\_database\_to\_transit\_gateway](#input\_expose\_database\_to\_transit\_gateway) | Allow the transit\_gateway\_cidr\_blocks to reach RDS/Aurora directly over the Transit Gateway (opens the database security groups on 5432). Default false: application traffic to the database stays in-VPC, and human/admin database access goes through Teleport rather than the corp network, so the database tier is not advertised to the TGW. Set true only when an external network genuinely needs a direct database path. | `bool` | `false` | no |
+| <a name="input_ignore_tag_keys"></a> [ignore\_tag\_keys](#input\_ignore\_tag\_keys) | Tag keys owned outside Terraform, ignored on every resource this module<br/>manages. default\_tags makes Terraform the owner of each resource's whole<br/>tag map, so a key written by something else (AWS stamps aws-apn-id onto<br/>RDS instances for partner attribution) shows up as a deletion in every<br/>plan. Listing it here leaves it alone: never added, never removed.<br/>Empty (the default) ignores nothing. | `list(string)` | `[]` | no |
 | <a name="input_igw_enabled"></a> [igw\_enabled](#input\_igw\_enabled) | Create the internet gateway and the public subnet tier (public subnets, their route table, and associations). Only consulted when create\_vpc = true. Set false for a fully private module-owned VPC with no internet gateway; requires egress\_mode != "nat" since NAT needs a public subnet + IGW. | `bool` | `true` | no |
 | <a name="input_install_aws_lb_controller"></a> [install\_aws\_lb\_controller](#input\_install\_aws\_lb\_controller) | Install AWS Load Balancer Controller via Helm | `bool` | `true` | no |
 | <a name="input_install_cluster_autoscaler"></a> [install\_cluster\_autoscaler](#input\_install\_cluster\_autoscaler) | Install Cluster Autoscaler via Helm | `bool` | `true` | no |
@@ -1313,7 +1366,7 @@ No modules.
 | <a name="input_vpc_cidr"></a> [vpc\_cidr](#input\_vpc\_cidr) | Primary (routable) CIDR block for the VPC. Pods do not draw from this range when pod isolation is enabled — they live in var.pod\_secondary\_cidr — so the routable tier only needs room for node ENIs, load balancers, database ENIs, and VPC endpoints. A /24 holds the default layout (node /27 + lb/public/database /28 per AZ) with a spare /28; widen only if you disable pod isolation (pods then re-enter the node subnets) or run many nodes/AZ. | `string` | `"10.0.0.0/24"` | no |
 | <a name="input_vpc_id"></a> [vpc\_id](#input\_vpc\_id) | ID of an existing (typically RAM-shared) VPC to consume when create\_vpc = false. Ignored when create\_vpc = true. | `string` | `null` | no |
 | <a name="input_vpn_gateway_ips"></a> [vpn\_gateway\_ips](#input\_vpn\_gateway\_ips) | VPN gateway IPs (legacy, for vpn mode) | `list(string)` | `[]` | no |
-| <a name="input_waf_web_acls"></a> [waf\_web\_acls](#input\_waf\_web\_acls) | AWS WAFv2 Web ACLs, keyed by an arbitrary name (typically an env).<br/>Empty by default (opt-in). One entry = one Web ACL; its ARN is returned under<br/>the same key in waf\_web\_acl\_arns. Attach it to a controller-managed ALB in<br/>gitops via the alb.ingress.kubernetes.io/wafv2-acl-arn annotation; use<br/>associate\_resource\_arns only for ALBs provisioned outside the controller.<br/>Set scope = "CLOUDFRONT" for an edge ACL attached to a CloudFront<br/>distribution's web\_acl\_id — those require the module to run in us-east-1.<br/>Rule names and priorities must each be unique across all rule kinds in an ACL.<br/>Set `name` to override the derived Web ACL name (default `<project>-<environment>-<key>`)<br/>when the ACL is not env-specific (e.g. one ACL shared across environments).<br/>See the README WAF feature section for full field docs and examples. | <pre>map(object({<br/>    name           = optional(string)<br/>    default_action = optional(string, "allow")<br/>    scope          = optional(string, "REGIONAL")<br/><br/>    rate_based_rules = optional(list(object({<br/>      name                      = string<br/>      priority                  = number<br/>      limit                     = number<br/>      evaluation_window_seconds = optional(number, 300)<br/>      action                    = optional(string, "block")<br/>      path_prefix               = optional(string)<br/>      aggregate_key_type        = optional(string, "IP")<br/>      forwarded_ip_header       = optional(string, "X-Forwarded-For")<br/>      forwarded_ip_fallback     = optional(string, "MATCH")<br/>    })), [])<br/><br/>    managed_rule_groups = optional(list(object({<br/>      name              = string<br/>      priority          = number<br/>      vendor_name       = optional(string, "AWS")<br/>      version           = optional(string)<br/>      override_to_count = optional(bool, false)<br/>      rule_action_overrides = optional(list(object({<br/>        name          = string<br/>        action_to_use = string<br/>      })), [])<br/>    })), [])<br/><br/>    ip_rules = optional(list(object({<br/>      name       = string<br/>      priority   = number<br/>      addresses  = list(string)<br/>      action     = optional(string, "block")<br/>      ip_version = optional(string, "IPV4")<br/>    })), [])<br/><br/>    geo_rules = optional(list(object({<br/>      name          = string<br/>      priority      = number<br/>      country_codes = list(string)<br/>      action        = optional(string, "block")<br/>      negate        = optional(bool, false)<br/>    })), [])<br/><br/>    associate_resource_arns = optional(list(string), [])<br/><br/>    logging = optional(object({<br/>      enabled               = optional(bool, false)<br/>      destination_arn       = optional(string)<br/>      retention_days        = optional(number, 365)<br/>      kms_key_arn           = optional(string)<br/>      redacted_header_names = optional(list(string), ["authorization", "cookie"])<br/>      only_blocked          = optional(bool, false)<br/>    }), {})<br/>  }))</pre> | `{}` | no |
+| <a name="input_waf_web_acls"></a> [waf\_web\_acls](#input\_waf\_web\_acls) | AWS WAFv2 Web ACLs, keyed by an arbitrary name (typically an env).<br/>Empty by default (opt-in). One entry = one Web ACL; its ARN is returned under<br/>the same key in waf\_web\_acl\_arns. Attach it to a controller-managed ALB in<br/>gitops via the alb.ingress.kubernetes.io/wafv2-acl-arn annotation; use<br/>associate\_resource\_arns only for ALBs provisioned outside the controller.<br/>Set scope = "CLOUDFRONT" for an edge ACL attached to a CloudFront<br/>distribution's web\_acl\_id — those require the module to run in us-east-1.<br/>Rule names and priorities must each be unique across all rule kinds in an ACL.<br/>Set `name` to override the derived Web ACL name (default `<project>-<environment>-<key>`)<br/>when the ACL is not env-specific (e.g. one ACL shared across environments).<br/>See the README WAF feature section for full field docs and examples. | <pre>map(object({<br/>    name           = optional(string)<br/>    default_action = optional(string, "allow")<br/>    scope          = optional(string, "REGIONAL")<br/><br/>    rate_based_rules = optional(list(object({<br/>      name                      = string<br/>      priority                  = number<br/>      limit                     = number<br/>      evaluation_window_seconds = optional(number, 300)<br/>      action                    = optional(string, "block")<br/>      path_prefix               = optional(string)<br/>      aggregate_key_type        = optional(string, "IP")<br/>      forwarded_ip_header       = optional(string, "X-Forwarded-For")<br/>      forwarded_ip_fallback     = optional(string, "MATCH")<br/>    })), [])<br/><br/>    managed_rule_groups = optional(list(object({<br/>      name              = string<br/>      priority          = number<br/>      vendor_name       = optional(string, "AWS")<br/>      version           = optional(string)<br/>      override_to_count = optional(bool, false)<br/>      rule_action_overrides = optional(list(object({<br/>        name          = string<br/>        action_to_use = string<br/>      })), [])<br/><br/>      # Narrow WHICH requests this group inspects. The group is evaluated for<br/>      # everything EXCEPT requests matching every condition set here — so this<br/>      # exempts known-good traffic from one group without letting it skip the<br/>      # rest of the ACL, which is what a standalone allow rule would do.<br/>      #<br/>      # exempt_when_headers maps header name => exact value. Every condition<br/>      # set — the IP list and each header — must match for a request to be<br/>      # exempt, so more conditions means a narrower exemption. At least one is<br/>      # required. Comparison is case-insensitive on both name and value.<br/>      #<br/>      # Headers are supplied by the client, so they are NOT a trust boundary on<br/>      # their own — anyone can send them. They are for narrowing an exemption<br/>      # to a specific host, route or caller; pair them with exempt_when_ips<br/>      # whenever the exemption itself needs to be trustworthy.<br/>      scope_down = optional(object({<br/>        exempt_when_ips     = optional(list(string))<br/>        exempt_when_headers = optional(map(string))<br/>      }))<br/>    })), [])<br/><br/>    ip_rules = optional(list(object({<br/>      name       = string<br/>      priority   = number<br/>      addresses  = list(string)<br/>      action     = optional(string, "block")<br/>      ip_version = optional(string, "IPV4")<br/>    })), [])<br/><br/>    geo_rules = optional(list(object({<br/>      name          = string<br/>      priority      = number<br/>      country_codes = list(string)<br/>      action        = optional(string, "block")<br/>      negate        = optional(bool, false)<br/>    })), [])<br/><br/>    associate_resource_arns = optional(list(string), [])<br/><br/>    logging = optional(object({<br/>      enabled               = optional(bool, false)<br/>      destination_arn       = optional(string)<br/>      retention_days        = optional(number, 365)<br/>      kms_key_arn           = optional(string)<br/>      redacted_header_names = optional(list(string), ["authorization", "cookie"])<br/>      only_blocked          = optional(bool, false)<br/>    }), {})<br/>  }))</pre> | `{}` | no |
 
 ## Outputs
 

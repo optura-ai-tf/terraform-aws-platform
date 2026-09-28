@@ -43,6 +43,10 @@ provider "aws" {
   default_tags {
     tags = local.common_tags
   }
+
+  ignore_tags {
+    keys = var.ignore_tag_keys
+  }
 }
 
 # Auto-detect if running inside Kubernetes cluster (TFC agent pod)

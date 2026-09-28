@@ -31,6 +31,19 @@ variable "tags" {
   default     = {}
 }
 
+variable "ignore_tag_keys" {
+  description = <<-EOT
+    Tag keys owned outside Terraform, ignored on every resource this module
+    manages. default_tags makes Terraform the owner of each resource's whole
+    tag map, so a key written by something else (AWS stamps aws-apn-id onto
+    RDS instances for partner attribution) shows up as a deletion in every
+    plan. Listing it here leaves it alone: never added, never removed.
+    Empty (the default) ignores nothing.
+  EOT
+  type        = list(string)
+  default     = []
+}
+
 # ===== Network Configuration =====
 
 # When the VPC is shared from another account (AWS RAM / VPC Sharing), the owner
@@ -925,6 +938,25 @@ variable "waf_web_acls" {
         name          = string
         action_to_use = string
       })), [])
+
+      # Narrow WHICH requests this group inspects. The group is evaluated for
+      # everything EXCEPT requests matching every condition set here — so this
+      # exempts known-good traffic from one group without letting it skip the
+      # rest of the ACL, which is what a standalone allow rule would do.
+      #
+      # exempt_when_headers maps header name => exact value. Every condition
+      # set — the IP list and each header — must match for a request to be
+      # exempt, so more conditions means a narrower exemption. At least one is
+      # required. Comparison is case-insensitive on both name and value.
+      #
+      # Headers are supplied by the client, so they are NOT a trust boundary on
+      # their own — anyone can send them. They are for narrowing an exemption
+      # to a specific host, route or caller; pair them with exempt_when_ips
+      # whenever the exemption itself needs to be trustworthy.
+      scope_down = optional(object({
+        exempt_when_ips     = optional(list(string))
+        exempt_when_headers = optional(map(string))
+      }))
     })), [])
 
     ip_rules = optional(list(object({
@@ -1155,6 +1187,61 @@ variable "waf_web_acls" {
   validation {
     condition     = alltrue([for k, acl in var.waf_web_acls : acl.logging.kms_key_arn == null || can(regex("^arn:aws[a-z-]*:kms:", acl.logging.kms_key_arn))])
     error_message = "waf_web_acls[*].logging.kms_key_arn must be a valid KMS key ARN when set."
+  }
+
+  # ---- managed_rule_groups[*].scope_down ----
+
+  validation {
+    condition = alltrue([
+      for k, acl in var.waf_web_acls : alltrue([
+        for g in acl.managed_rule_groups :
+        g.scope_down == null ? true : (
+          g.scope_down.exempt_when_ips != null ||
+          (g.scope_down.exempt_when_headers != null && length(coalesce(g.scope_down.exempt_when_headers, {})) > 0)
+        )
+      ])
+    ])
+    error_message = "waf_web_acls[*].managed_rule_groups[*].scope_down: set at least one of exempt_when_ips or a non-empty exempt_when_headers. An empty scope_down would exempt nothing and is almost certainly a mistake."
+  }
+
+  validation {
+    condition = alltrue([
+      for k, acl in var.waf_web_acls : alltrue([
+        for g in acl.managed_rule_groups :
+        g.scope_down == null ? true : (
+          g.scope_down.exempt_when_ips == null ? true : (
+            length(g.scope_down.exempt_when_ips) > 0 &&
+            alltrue([for c in g.scope_down.exempt_when_ips : can(cidrnetmask(c))])
+          )
+        )
+      ])
+    ])
+    error_message = "waf_web_acls[*].managed_rule_groups[*].scope_down.exempt_when_ips must be a non-empty list of valid IPv4 CIDRs."
+  }
+
+  validation {
+    condition = alltrue([
+      for k, acl in var.waf_web_acls : alltrue([
+        for g in acl.managed_rule_groups :
+        g.scope_down == null ? true : alltrue([
+          for hv in values(coalesce(g.scope_down.exempt_when_headers, {})) : length(hv) > 0
+        ])
+      ])
+    ])
+    error_message = "waf_web_acls[*].managed_rule_groups[*].scope_down.exempt_when_headers values must be non-empty — an empty string would match nothing."
+  }
+
+  validation {
+    condition = alltrue([
+      for k, acl in var.waf_web_acls : alltrue([
+        for g in acl.managed_rule_groups :
+        g.scope_down == null ? true : (
+          length(distinct([for hn in keys(coalesce(g.scope_down.exempt_when_headers, {})) : lower(hn)])) ==
+          length(coalesce(g.scope_down.exempt_when_headers, {}))
+        )
+      ])
+    ])
+    error_message = "waf_web_acls[*].managed_rule_groups[*].scope_down.exempt_when_headers names must be unique after lowercasing. WAF matches header names case-insensitively, so e.g. \"Host\" and \"host\" would render two conditions on the same header that can never both match, silently disabling the exemption."
   }
 }
 
