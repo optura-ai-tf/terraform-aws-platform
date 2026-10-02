@@ -347,9 +347,14 @@ Set `storage_general_enabled = false` to skip. When enabled, configure:
 | `storage_general_service_account` | `app-storage` | Service account granted S3 access via IRSA |
 | `storage_general_versioning` | `true` | Enable S3 object versioning |
 | `storage_general_bucket_name` | `{project}-{env}-storage` | Override the bucket name |
+| `storage_general_cors_origins` | `[]` | Browser origins allowed to upload directly via a presigned URL |
 
 The `general_storage_role_id` output is the IAM role ARN to annotate the service
 account with.
+
+Browser uploads need `storage_general_cors_origins`. The app signs the URL but
+the browser sends the PUT, so S3 answers the preflight; with no CORS rule it
+returns 403 and the upload never leaves the browser.
 
 ### Feature: Cluster Access via Teleport (`access_mode`)
 
@@ -1165,6 +1170,7 @@ No modules.
 | [aws_route_table_association.public](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/route_table_association) | resource |
 | [aws_s3_bucket.logging](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/s3_bucket) | resource |
 | [aws_s3_bucket.storage](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/s3_bucket) | resource |
+| [aws_s3_bucket_cors_configuration.storage](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/s3_bucket_cors_configuration) | resource |
 | [aws_s3_bucket_lifecycle_configuration.logging](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/s3_bucket_lifecycle_configuration) | resource |
 | [aws_s3_bucket_lifecycle_configuration.storage](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/s3_bucket_lifecycle_configuration) | resource |
 | [aws_s3_bucket_public_access_block.logging](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/s3_bucket_public_access_block) | resource |
@@ -1333,6 +1339,7 @@ No modules.
 | <a name="input_registry_enabled"></a> [registry\_enabled](#input\_registry\_enabled) | Create new ECR repository (false to use existing) | `bool` | `false` | no |
 | <a name="input_single_nat_gateway"></a> [single\_nat\_gateway](#input\_single\_nat\_gateway) | Use single NAT Gateway (cost savings for dev) | `bool` | `false` | no |
 | <a name="input_storage_general_bucket_name"></a> [storage\_general\_bucket\_name](#input\_storage\_general\_bucket\_name) | Override bucket name for general storage (default: {project}-{environment}-storage) | `string` | `null` | no |
+| <a name="input_storage_general_cors_origins"></a> [storage\_general\_cors\_origins](#input\_storage\_general\_cors\_origins) | Browser origins allowed to call the general storage bucket directly (presigned uploads). Empty disables CORS, which blocks every browser upload. | `list(string)` | `[]` | no |
 | <a name="input_storage_general_enabled"></a> [storage\_general\_enabled](#input\_storage\_general\_enabled) | Create general purpose storage | `bool` | `true` | no |
 | <a name="input_storage_general_encryption_type"></a> [storage\_general\_encryption\_type](#input\_storage\_general\_encryption\_type) | Encryption type for storage (AES256 or aws:kms) | `string` | `"AES256"` | no |
 | <a name="input_storage_general_lifecycle"></a> [storage\_general\_lifecycle](#input\_storage\_general\_lifecycle) | Lifecycle policy for storage | <pre>object({<br/>    transition_to_ia_days              = number<br/>    noncurrent_version_expiration_days = number<br/>  })</pre> | <pre>{<br/>  "noncurrent_version_expiration_days": 30,<br/>  "transition_to_ia_days": 90<br/>}</pre> | no |

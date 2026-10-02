@@ -6,6 +6,20 @@ form `aws/platform/vX.Y.Z`.
 
 ## Unreleased
 
+## 0.5.5 — 2026-10-02
+
+### Added
+
+- **`storage_general_cors_origins` — browser access to the general bucket.**
+  A presigned PUT is issued by the app but sent by the browser, so S3 answers
+  the CORS preflight itself. A bucket with no CORS rule answers that preflight
+  with 403 and no `Access-Control-Allow-Origin`, and the browser drops the
+  upload before it is sent — the signature and the IAM grants are never
+  reached. Set this to the app origins that upload (e.g.
+  `["https://app.example.com"]`) to allow `GET`/`HEAD`/`PUT` and expose
+  `ETag`. Defaults to `[]`, which creates no CORS configuration and leaves
+  existing buckets untouched.
+
 ## 0.5.4 — 2026-09-28
 
 ### Fixed

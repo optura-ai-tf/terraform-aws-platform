@@ -1341,6 +1341,12 @@ variable "storage_general_encryption_type" {
   }
 }
 
+variable "storage_general_cors_origins" {
+  description = "Browser origins allowed to call the general storage bucket directly (presigned uploads). Empty disables CORS, which blocks every browser upload."
+  type        = list(string)
+  default     = []
+}
+
 variable "storage_general_lifecycle_enabled" {
   description = "Enable lifecycle policies on storage"
   type        = bool

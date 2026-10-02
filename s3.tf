@@ -120,6 +120,22 @@ resource "aws_s3_bucket_public_access_block" "storage" {
   restrict_public_buckets = true
 }
 
+# A presigned PUT is issued by the app but sent by the browser, so S3 answers
+# the preflight itself. Without a rule it returns 403 and the upload never
+# leaves the browser.
+resource "aws_s3_bucket_cors_configuration" "storage" {
+  count  = var.storage_general_enabled && length(var.storage_general_cors_origins) > 0 ? 1 : 0
+  bucket = aws_s3_bucket.storage[0].id
+
+  cors_rule {
+    allowed_origins = var.storage_general_cors_origins
+    allowed_methods = ["GET", "HEAD", "PUT"]
+    allowed_headers = ["*"]
+    expose_headers  = ["ETag"]
+    max_age_seconds = 3000
+  }
+}
+
 resource "aws_s3_bucket_lifecycle_configuration" "storage" {
   count  = var.storage_general_enabled && var.storage_general_lifecycle_enabled ? 1 : 0
   bucket = aws_s3_bucket.storage[0].id
