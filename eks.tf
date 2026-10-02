@@ -19,6 +19,21 @@ resource "aws_eks_cluster" "main" {
     security_group_ids      = [aws_security_group.eks_cluster_additional.id]
   }
 
+  # CONFIG_MAP (default) keeps every existing cluster on aws-auth. Narrowing
+  # this is rejected by AWS, so a cluster can move CONFIG_MAP ->
+  # API_AND_CONFIG_MAP -> API but never back.
+  access_config {
+    authentication_mode = var.cluster_authentication_mode
+  }
+
+  # bootstrap_cluster_creator_admin_permissions is deliberately NOT set:
+  # it is create-time only (ForceNew), so adding it to a cluster whose state
+  # predates access_config can plan a REPLACEMENT of the live cluster. AWS
+  # defaults it to true at create time, which is what we want anyway.
+  lifecycle {
+    ignore_changes = [access_config[0].bootstrap_cluster_creator_admin_permissions]
+  }
+
   # Encryption configuration
   dynamic "encryption_config" {
     for_each = var.enable_cluster_encryption ? [1] : []

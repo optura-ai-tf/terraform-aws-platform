@@ -119,7 +119,9 @@ data "aws_eks_addon_version" "ebs_csi_driver" {
 # instead of static AWS access keys. The agent injects temporary credentials
 # into pods via the default AWS credential chain.
 resource "aws_eks_addon" "pod_identity_agent" {
-  count = length(var.pod_identity_roles) > 0 ? 1 : 0
+  # karpenter_enabled creates its own Pod Identity association, so the agent is
+  # required even when pod_identity_roles is empty.
+  count = local.pod_identity_agent_required ? 1 : 0
 
   cluster_name                = aws_eks_cluster.main.name
   addon_name                  = "eks-pod-identity-agent"
@@ -134,7 +136,7 @@ resource "aws_eks_addon" "pod_identity_agent" {
 }
 
 data "aws_eks_addon_version" "pod_identity_agent" {
-  count              = length(var.pod_identity_roles) > 0 ? 1 : 0
+  count              = local.pod_identity_agent_required ? 1 : 0
   addon_name         = "eks-pod-identity-agent"
   kubernetes_version = aws_eks_cluster.main.version
   most_recent        = true

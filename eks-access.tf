@@ -32,7 +32,12 @@
 # ===================================================================
 
 # Create aws-auth ConfigMap with node groups and additional admins
+# Skipped under cluster_authentication_mode = "API": the cluster ignores aws-auth
+# entirely there, and writing it would leave a misleading ConfigMap behind that
+# reads like live access control.
 resource "kubernetes_config_map_v1_data" "aws_auth" {
+  count = var.cluster_authentication_mode == "API" ? 0 : 1
+
   force = true
 
   metadata {

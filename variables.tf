@@ -1633,3 +1633,59 @@ variable "irsa_roles" {
     error_message = "irsa_roles[].service_account must be a non-empty exact name — wildcards (`*` or `?`) are not allowed. An empty value produces a trust-policy `:sub` of `system:serviceaccount:<ns>:` which never matches a real ServiceAccount; a wildcard like `*` produces `system:serviceaccount:<ns>:*` which grants ANY ServiceAccount in the matching namespaces, defeating the per-SA blast-radius isolation. Use `namespace_pattern` for wildcard matching."
   }
 }
+
+# ===== Karpenter =====
+
+variable "karpenter_enabled" {
+  description = <<-EOT
+    Create the IAM prerequisites for Karpenter: a controller role bound by Pod
+    Identity to the karpenter/karpenter ServiceAccount, and a node role +
+    instance profile for the EC2 instances Karpenter launches.
+
+    This creates IAM and the node access entry ONLY. The controller, NodePools
+    and EC2NodeClasses are deployed from the gitops repo, which references the
+    `karpenter_node_instance_profile` output as EC2NodeClass
+    `spec.instanceProfile`.
+
+    Requires cluster_authentication_mode = "API" or "API_AND_CONFIG_MAP":
+    the Karpenter node role joins via an access entry.
+  EOT
+  type        = bool
+  default     = false
+}
+
+variable "karpenter_node_role_additional_policies" {
+  description = <<-EOT
+    Extra managed-policy ARNs to attach to the Karpenter node role, on top of
+    the four an EKS worker always needs (WorkerNode, CNI, ECR read, SSM core).
+  EOT
+  type        = list(string)
+  default     = []
+}
+
+# ===== EKS access mode =====
+
+variable "cluster_authentication_mode" {
+  description = <<-EOT
+    How IAM principals are granted access to the cluster.
+
+    - CONFIG_MAP      aws-auth ConfigMap only (default; what every existing
+                      cluster uses).
+    - API             EKS access entries only. aws-auth is ignored by the
+                      cluster — do not pick this for a cluster whose nodes
+                      currently map through aws-auth.
+    - API_AND_CONFIG_MAP  Both. The migration path: entries take effect while
+                      aws-auth keeps working, so a cluster can move over
+                      without a window where nodes cannot join.
+
+    AWS does not allow narrowing this (API_AND_CONFIG_MAP -> CONFIG_MAP, or
+    API -> anything). Widening is in-place and safe.
+  EOT
+  type        = string
+  default     = "CONFIG_MAP"
+
+  validation {
+    condition     = contains(["CONFIG_MAP", "API", "API_AND_CONFIG_MAP"], var.cluster_authentication_mode)
+    error_message = "cluster_authentication_mode must be CONFIG_MAP, API, or API_AND_CONFIG_MAP."
+  }
+}

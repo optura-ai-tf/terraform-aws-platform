@@ -421,3 +421,30 @@ output "waf_web_acl_capacities" {
   description = "Map of waf_web_acls key => WCU (Web ACL Capacity Units) consumed by that ACL's rules. Watch this against the 1500 WCU default ceiling as managed rule groups are added. Empty map when no ACLs are defined."
   value       = { for k, w in aws_wafv2_web_acl.main : k => w.capacity }
 }
+
+# ===== Karpenter =====
+
+output "karpenter_node_role_name" {
+  description = "Karpenter node role name."
+  value       = try(aws_iam_role.karpenter_nodes[0].name, null)
+}
+
+output "karpenter_node_role_arn" {
+  description = "Karpenter node role ARN."
+  value       = try(aws_iam_role.karpenter_nodes[0].arn, null)
+}
+
+output "karpenter_node_instance_profile" {
+  description = "Karpenter node instance profile — EC2NodeClass `spec.instanceProfile`."
+  value       = try(aws_iam_instance_profile.karpenter_nodes[0].name, null)
+}
+
+output "karpenter_controller_role_arn" {
+  description = "Karpenter controller role ARN (bound to karpenter/karpenter by Pod Identity)."
+  value       = try(aws_iam_role.karpenter_controller[0].arn, null)
+}
+
+output "cluster_authentication_mode" {
+  description = "The cluster's effective EKS authentication mode."
+  value       = var.cluster_authentication_mode
+}

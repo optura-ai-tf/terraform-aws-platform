@@ -6,6 +6,52 @@ form `aws/platform/vX.Y.Z`.
 
 ## Unreleased
 
+## 0.6.0 — 2026-10-01
+
+### Added
+
+- **`cluster_authentication_mode` — EKS access entries, opt-in.** Defaults to
+  `CONFIG_MAP`, which is what every existing cluster uses, so this release is a
+  no-op for them. `API_AND_CONFIG_MAP` writes access entries *and* aws-auth so a
+  live cluster can migrate without a window where nodes cannot join; `API`
+  writes entries only and skips the aws-auth ConfigMap entirely (the cluster
+  ignores it in that mode, and leaving one behind would read like live access
+  control). AWS rejects narrowing the mode, so `CONFIG_MAP` → `API_AND_CONFIG_MAP`
+  → `API` is one-way.
+
+  Admin principals from `cluster_admin_arns` get an entry plus
+  `AmazonEKSClusterAdminPolicy`. The managed node-group role gets an `EC2_LINUX`
+  entry only under `API`: under `API_AND_CONFIG_MAP` aws-auth already maps it,
+  and AWS rejects an entry for a principal aws-auth also maps.
+
+- **`karpenter_enabled` — Karpenter IAM prerequisites, opt-in (default off).**
+  Creates a controller role bound to `karpenter/karpenter` by Pod Identity, a
+  node role for the instances Karpenter launches, an instance profile, and the
+  node's `EC2_LINUX` access entry. The controller, NodePools and EC2NodeClasses
+  are deployed from the gitops repo.
+
+  Requires `cluster_authentication_mode` other than `CONFIG_MAP` (validated): Karpenter
+  nodes join through an access entry, which aws-auth cannot express for
+  instances the module never sees.
+
+  The controller policy scopes `TerminateInstances`/`DeleteLaunchTemplate` to
+  resources tagged `kubernetes.io/cluster/<name>=owned`, `ec2:CreateTags` to
+  that tag at creation time or on already-owned resources, and `iam:PassRole`
+  to the node role alone — so none of them can reach another cluster in a
+  shared account.
+
+  The EC2NodeClass must use `spec.instanceProfile` (the
+  `karpenter_node_instance_profile` output): the profile is created here and
+  the controller holds only `iam:GetInstanceProfile` on it — the read Karpenter
+  needs to resolve the NodeClass — and no instance-profile WRITE permissions,
+  so `spec.role`, where Karpenter creates its own profile, will not work.
+
+  New outputs: `karpenter_node_instance_profile`, `karpenter_node_role_name`,
+  `karpenter_node_role_arn`, `karpenter_controller_role_arn`,
+  `cluster_authentication_mode`.
+
+  `karpenter_node_role_additional_policies` attaches extra managed policies to
+  the node role.
 ## 0.5.5 — 2026-10-02
 
 ### Added

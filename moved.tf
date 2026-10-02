@@ -119,3 +119,19 @@ moved {
   from = aws_security_group_rule.nodes_egress
   to   = aws_security_group_rule.nodes_egress[0]
 }
+
+# ===================================================================
+# State migration: aws-auth ConfigMap gained a count
+# ===================================================================
+#
+# 0.6.0 added `count` to kubernetes_config_map_v1_data.aws_auth so it can be
+# skipped under cluster_authentication_mode = "API". That changes its address
+# from the bare name to [0]; without this block Terraform plans a
+# destroy/create of the ConfigMap that every node's cluster membership depends
+# on. Reading it as a move is the whole point.
+# ===================================================================
+
+moved {
+  from = kubernetes_config_map_v1_data.aws_auth
+  to   = kubernetes_config_map_v1_data.aws_auth[0]
+}

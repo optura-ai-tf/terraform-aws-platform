@@ -20,7 +20,7 @@ region from the `region` input and configures the Kubernetes/Helm providers itse
 ```hcl
 module "platform" {
   source  = "optura-ai-tf/platform/aws"
-  version = "~> 0.5"
+  version = "~> 0.6"
 
   environment  = "dev"
   region       = "us-east-1"
@@ -1102,6 +1102,9 @@ No modules.
 | [aws_ecr_lifecycle_policy.main](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ecr_lifecycle_policy) | resource |
 | [aws_ecr_repository.main](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/ecr_repository) | resource |
 | [aws_eip.nat](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/eip) | resource |
+| [aws_eks_access_entry.admin](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/eks_access_entry) | resource |
+| [aws_eks_access_entry.karpenter_nodes](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/eks_access_entry) | resource |
+| [aws_eks_access_policy_association.admin](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/eks_access_policy_association) | resource |
 | [aws_eks_addon.coredns](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/eks_addon) | resource |
 | [aws_eks_addon.ebs_csi_driver](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/eks_addon) | resource |
 | [aws_eks_addon.kube_proxy](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/eks_addon) | resource |
@@ -1110,11 +1113,14 @@ No modules.
 | [aws_eks_addon.vpc_cni](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/eks_addon) | resource |
 | [aws_eks_cluster.main](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/eks_cluster) | resource |
 | [aws_eks_node_group.main](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/eks_node_group) | resource |
+| [aws_eks_pod_identity_association.karpenter_controller](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/eks_pod_identity_association) | resource |
 | [aws_eks_pod_identity_association.pod_identity](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/eks_pod_identity_association) | resource |
+| [aws_iam_instance_profile.karpenter_nodes](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_instance_profile) | resource |
 | [aws_iam_openid_connect_provider.eks](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_openid_connect_provider) | resource |
 | [aws_iam_policy.aws_lb_controller](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_policy) | resource |
 | [aws_iam_policy.cluster_autoscaler](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_policy) | resource |
 | [aws_iam_policy.irsa](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_policy) | resource |
+| [aws_iam_policy.karpenter_controller](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_policy) | resource |
 | [aws_iam_policy.logging](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_policy) | resource |
 | [aws_iam_policy.pod_identity](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_policy) | resource |
 | [aws_iam_policy.storage](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_policy) | resource |
@@ -1125,6 +1131,8 @@ No modules.
 | [aws_iam_role.eks_cluster](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role) | resource |
 | [aws_iam_role.eks_nodes](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role) | resource |
 | [aws_iam_role.irsa](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role) | resource |
+| [aws_iam_role.karpenter_controller](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role) | resource |
+| [aws_iam_role.karpenter_nodes](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role) | resource |
 | [aws_iam_role.logging](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role) | resource |
 | [aws_iam_role.pod_identity](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role) | resource |
 | [aws_iam_role.rds_monitoring](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role) | resource |
@@ -1140,6 +1148,8 @@ No modules.
 | [aws_iam_role_policy_attachment.eks_vpc_resource_controller](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy_attachment) | resource |
 | [aws_iam_role_policy_attachment.eks_worker_node_policy](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy_attachment) | resource |
 | [aws_iam_role_policy_attachment.irsa](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy_attachment) | resource |
+| [aws_iam_role_policy_attachment.karpenter_controller](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy_attachment) | resource |
+| [aws_iam_role_policy_attachment.karpenter_nodes](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy_attachment) | resource |
 | [aws_iam_role_policy_attachment.logging](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy_attachment) | resource |
 | [aws_iam_role_policy_attachment.pod_identity](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy_attachment) | resource |
 | [aws_iam_role_policy_attachment.rds_monitoring](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/iam_role_policy_attachment) | resource |
@@ -1230,6 +1240,7 @@ No modules.
 | [kubernetes_secret.tfc_agent_token](https://registry.terraform.io/providers/hashicorp/kubernetes/latest/docs/resources/secret) | resource |
 | [kubernetes_service_account.tfc_agent](https://registry.terraform.io/providers/hashicorp/kubernetes/latest/docs/resources/service_account) | resource |
 | [random_password.rds](https://registry.terraform.io/providers/hashicorp/random/latest/docs/resources/password) | resource |
+| [terraform_data.karpenter_access_mode_guard](https://registry.terraform.io/providers/hashicorp/terraform/latest/docs/resources/data) | resource |
 | [terraform_data.network_mode_guard](https://registry.terraform.io/providers/hashicorp/terraform/latest/docs/resources/data) | resource |
 | [terraform_data.rds_iam_setup_hash](https://registry.terraform.io/providers/hashicorp/terraform/latest/docs/resources/data) | resource |
 | [terraform_data.teleport_validation](https://registry.terraform.io/providers/hashicorp/terraform/latest/docs/resources/data) | resource |
@@ -1283,6 +1294,7 @@ No modules.
 | <a name="input_aurora_serverless_min_capacity"></a> [aurora\_serverless\_min\_capacity](#input\_aurora\_serverless\_min\_capacity) | Aurora Serverless v2 minimum capacity in ACUs (0.5 increments). 0 allows scale-to-zero pause on supported versions. | `number` | `0.5` | no |
 | <a name="input_aws_lb_controller_version"></a> [aws\_lb\_controller\_version](#input\_aws\_lb\_controller\_version) | AWS Load Balancer Controller Helm chart version | `string` | `"1.16.0"` | no |
 | <a name="input_cluster_admin_arns"></a> [cluster\_admin\_arns](#input\_cluster\_admin\_arns) | List of IAM user/role ARNs to grant cluster admin access (system:masters). Empty list = no additional admins. Supports AWS SSO roles. | `list(string)` | `[]` | no |
+| <a name="input_cluster_authentication_mode"></a> [cluster\_authentication\_mode](#input\_cluster\_authentication\_mode) | How IAM principals are granted access to the cluster.<br/><br/>- CONFIG\_MAP      aws-auth ConfigMap only (default; what every existing<br/>                  cluster uses).<br/>- API             EKS access entries only. aws-auth is ignored by the<br/>                  cluster — do not pick this for a cluster whose nodes<br/>                  currently map through aws-auth.<br/>- API\_AND\_CONFIG\_MAP  Both. The migration path: entries take effect while<br/>                  aws-auth keeps working, so a cluster can move over<br/>                  without a window where nodes cannot join.<br/><br/>AWS does not allow narrowing this (API\_AND\_CONFIG\_MAP -> CONFIG\_MAP, or<br/>API -> anything). Widening is in-place and safe. | `string` | `"CONFIG_MAP"` | no |
 | <a name="input_cluster_autoscaler_version"></a> [cluster\_autoscaler\_version](#input\_cluster\_autoscaler\_version) | Cluster Autoscaler Helm chart version | `string` | `"9.58.0"` | no |
 | <a name="input_cluster_public_subnets_enabled"></a> [cluster\_public\_subnets\_enabled](#input\_cluster\_public\_subnets\_enabled) | Also place EKS control-plane ENIs in the public subnets (legacy layout). Default false = node subnets only. Only consulted when create\_vpc = true and the public tier exists. | `bool` | `false` | no |
 | <a name="input_cni_prefix_delegation_enabled"></a> [cni\_prefix\_delegation\_enabled](#input\_cni\_prefix\_delegation\_enabled) | Enable VPC CNI prefix delegation (ENABLE\_PREFIX\_DELEGATION) to raise pod density per node. Defaults true; requires Nitro instance types. Set false only for non-Nitro nodes. Interacts with pod\_isolation\_enabled: when isolation is on (the default) pods draw from the /23 pod subnets where /28 prefix allocation is comfortable, but when pod\_isolation\_enabled = false pods return to the node subnets — and prefix delegation carves /28 blocks that a default /27 node subnet cannot hold (WARM\_PREFIX\_TARGET = 1 pre-warms a prefix per ENI and exhausts the subnet, stalling the CNI). For that combination either set this false or widen node subnets to /25 or larger (the module enforces this — see aws/byo-network.tf). | `bool` | `true` | no |
@@ -1308,6 +1320,8 @@ No modules.
 | <a name="input_install_aws_lb_controller"></a> [install\_aws\_lb\_controller](#input\_install\_aws\_lb\_controller) | Install AWS Load Balancer Controller via Helm | `bool` | `true` | no |
 | <a name="input_install_cluster_autoscaler"></a> [install\_cluster\_autoscaler](#input\_install\_cluster\_autoscaler) | Install Cluster Autoscaler via Helm | `bool` | `true` | no |
 | <a name="input_irsa_roles"></a> [irsa\_roles](#input\_irsa\_roles) | Map of service names to IRSA (IAM Roles for Service Accounts)<br/>configurations. Each entry creates:<br/>- An IAM role with a federated trust policy referencing the<br/>  cluster's OIDC provider, using `StringLike` on the `:sub` claim<br/>  so wildcards in `namespace_pattern` are honored<br/>- An IAM policy with the entry's policy\_statements<br/><br/>The K8s ServiceAccount(s) that match the namespace\_pattern must<br/>be created separately (typically via your manifests / GitOps)<br/>with the annotation `eks.amazonaws.com/role-arn = <role_arn>`<br/>(the role ARN is exposed in the `irsa` output). Once that's in<br/>place, adding a new matching namespace does NOT require a<br/>terraform apply — the wildcard already covers it.<br/><br/>`namespace_pattern` supports IAM `StringLike` glob syntax: `*`<br/>matches any sequence of characters, `?` matches a single<br/>character. Example values: "core" (exact match), "tenant-*",<br/>"*-prod".<br/><br/>Independent of pod\_identity\_roles — both may be populated on the<br/>same cluster. | <pre>map(object({<br/>    namespace_pattern = string<br/>    service_account   = string<br/>    policy_statements = list(object({<br/>      sid       = string<br/>      actions   = list(string)<br/>      resources = list(string)<br/>    }))<br/>  }))</pre> | `{}` | no |
+| <a name="input_karpenter_enabled"></a> [karpenter\_enabled](#input\_karpenter\_enabled) | Create the IAM prerequisites for Karpenter: a controller role bound by Pod<br/>Identity to the karpenter/karpenter ServiceAccount, and a node role +<br/>instance profile for the EC2 instances Karpenter launches.<br/><br/>This creates IAM and the node access entry ONLY. The controller, NodePools<br/>and EC2NodeClasses are deployed from the gitops repo, which references the<br/>`karpenter_node_instance_profile` output as EC2NodeClass<br/>`spec.instanceProfile`.<br/><br/>Requires cluster\_authentication\_mode = "API" or "API\_AND\_CONFIG\_MAP":<br/>the Karpenter node role joins via an access entry. | `bool` | `false` | no |
+| <a name="input_karpenter_node_role_additional_policies"></a> [karpenter\_node\_role\_additional\_policies](#input\_karpenter\_node\_role\_additional\_policies) | Extra managed-policy ARNs to attach to the Karpenter node role, on top of<br/>the four an EKS worker always needs (WorkerNode, CNI, ECR read, SSM core). | `list(string)` | `[]` | no |
 | <a name="input_kubernetes_version"></a> [kubernetes\_version](#input\_kubernetes\_version) | Kubernetes version | `string` | `"1.35"` | no |
 | <a name="input_lb_subnet_cidrs"></a> [lb\_subnet\_cidrs](#input\_lb\_subnet\_cidrs) | CIDR blocks for internal load balancer subnets (one per AZ). Internal ALBs/NLBs live in their own small subnets so nodes never compete with load balancers for address space. /28 each holds plenty of internal LB ENIs. Ignored when lb\_subnet\_enabled = false. | `list(string)` | <pre>[<br/>  "10.0.0.96/28",<br/>  "10.0.0.112/28",<br/>  "10.0.0.128/28"<br/>]</pre> | no |
 | <a name="input_lb_subnet_enabled"></a> [lb\_subnet\_enabled](#input\_lb\_subnet\_enabled) | Create a dedicated internal load-balancer subnet tier. When false, internal LBs are placed in the node subnets instead — in create mode no lb subnets are created and the node subnets receive the kubernetes.io/role/internal-elb tag; in consumer mode lb\_subnet\_ids resolves to the node subnets and its precondition is relaxed (the caller tags their own node subnets). | `bool` | `true` | no |
@@ -1388,6 +1402,7 @@ No modules.
 | <a name="output_cluster_access_mode"></a> [cluster\_access\_mode](#output\_cluster\_access\_mode) | Current cluster API access configuration |
 | <a name="output_cluster_admin_count"></a> [cluster\_admin\_count](#output\_cluster\_admin\_count) | Number of additional cluster admins configured |
 | <a name="output_cluster_admin_principals"></a> [cluster\_admin\_principals](#output\_cluster\_admin\_principals) | List of IAM principals granted cluster admin access |
+| <a name="output_cluster_authentication_mode"></a> [cluster\_authentication\_mode](#output\_cluster\_authentication\_mode) | The cluster's effective EKS authentication mode. |
 | <a name="output_cluster_certificate_authority_data"></a> [cluster\_certificate\_authority\_data](#output\_cluster\_certificate\_authority\_data) | Base64 encoded certificate data for cluster |
 | <a name="output_cluster_endpoint"></a> [cluster\_endpoint](#output\_cluster\_endpoint) | Endpoint for Kubernetes cluster API server |
 | <a name="output_cluster_id"></a> [cluster\_id](#output\_cluster\_id) | Name of the Kubernetes cluster (EKS uses name as ID) |
@@ -1416,6 +1431,10 @@ No modules.
 | <a name="output_general_storage_role_id"></a> [general\_storage\_role\_id](#output\_general\_storage\_role\_id) | IAM role ARN for storage workload (IRSA) |
 | <a name="output_ingress_subnet_ids"></a> [ingress\_subnet\_ids](#output\_ingress\_subnet\_ids) | IDs of public subnets for internet-facing load balancers. Empty in consumer mode (create\_vpc = false): a shared/RAM-shared VPC is private-by-design here — ingress arrives via the corporate network/Transit Gateway and internal LBs, and any public edge is the owner account's concern. There is intentionally no public\_subnet\_ids consumer input. |
 | <a name="output_irsa"></a> [irsa](#output\_irsa) | IRSA configuration per service — role ARNs and the trust-policy<br/>pattern (one entry per irsa\_roles key). Annotate K8s<br/>ServiceAccount(s) with `eks.amazonaws.com/role-arn = <role_arn>`<br/>to use; the trust policy uses StringLike on `:sub` so wildcards<br/>in namespace\_pattern work without terraform apply. |
+| <a name="output_karpenter_controller_role_arn"></a> [karpenter\_controller\_role\_arn](#output\_karpenter\_controller\_role\_arn) | Karpenter controller role ARN (bound to karpenter/karpenter by Pod Identity). |
+| <a name="output_karpenter_node_instance_profile"></a> [karpenter\_node\_instance\_profile](#output\_karpenter\_node\_instance\_profile) | Karpenter node instance profile — EC2NodeClass `spec.instanceProfile`. |
+| <a name="output_karpenter_node_role_arn"></a> [karpenter\_node\_role\_arn](#output\_karpenter\_node\_role\_arn) | Karpenter node role ARN. |
+| <a name="output_karpenter_node_role_name"></a> [karpenter\_node\_role\_name](#output\_karpenter\_node\_role\_name) | Karpenter node role name. |
 | <a name="output_kubectl_config_command"></a> [kubectl\_config\_command](#output\_kubectl\_config\_command) | Command to configure kubectl |
 | <a name="output_lb_subnet_ids"></a> [lb\_subnet\_ids](#output\_lb\_subnet\_ids) | IDs of internal load balancer subnets |
 | <a name="output_logging_storage_id"></a> [logging\_storage\_id](#output\_logging\_storage\_id) | ID/ARN of the logging storage |
