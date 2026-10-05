@@ -6,6 +6,28 @@ form `aws/platform/vX.Y.Z`.
 
 ## Unreleased
 
+## 0.6.1 — 2026-10-05
+
+### Fixed
+
+- **EKS access entries for AWS SSO admin roles.** An SSO permission-set role
+  has an IAM path, and the two access mechanisms disagree on it: aws-auth
+  accepts the path-stripped ARN, while `CreateAccessEntry` rejects it as
+  `invalid principal`. Under `API` or `API_AND_CONFIG_MAP`, an admin supplied
+  in the aws-auth form therefore got no access entry. `cluster_admin_arns`
+  keeps that form — no caller change — and the path is now rebuilt for the
+  entry. Only the `:role/AWSReservedSSO_` prefix is rewritten, so the account
+  ID in the supplied ARN is carried through: an admin is granted access in the
+  account their ARN names, never the provider's.
+
+### Added
+
+- **`sso_instance_region` — region segment of the rebuilt SSO path.** Empty by
+  default, which is correct for an IAM Identity Center hosted in `us-east-1`:
+  AWS omits the region from those role ARNs. Set it to the Identity Center's
+  region otherwise. Separate from `var.region`, since the Identity Center need
+  not live in the cluster's region.
+
 ## 0.6.0 — 2026-10-01
 
 ### Added

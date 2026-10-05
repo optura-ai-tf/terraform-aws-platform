@@ -14,6 +14,21 @@
 
 locals {
   access_entries_enabled = var.cluster_authentication_mode != "CONFIG_MAP"
+
+  # Access entries reject a path-stripped SSO ARN as "invalid principal";
+  # aws-auth accepts it. cluster_admin_arns keeps the aws-auth form and the SSO
+  # path is rebuilt here, preserving the ARN's account ID. A us-east-1 Identity
+  # Center omits the region segment, so sso_instance_region may be "".
+  sso_path = var.sso_instance_region == "" ? "aws-reserved/sso.amazonaws.com" : "aws-reserved/sso.amazonaws.com/${var.sso_instance_region}"
+
+  admin_entry_arns = {
+    for arn in var.cluster_admin_arns :
+    arn => (
+      can(regex("^arn:aws:iam::[0-9]{12}:role/AWSReservedSSO_", arn))
+      ? replace(arn, ":role/AWSReservedSSO_", ":role/${local.sso_path}/AWSReservedSSO_")
+      : arn
+    )
+  }
 }
 
 # --- Cluster admins ---
@@ -22,7 +37,7 @@ resource "aws_eks_access_entry" "admin" {
   for_each = local.access_entries_enabled ? toset(var.cluster_admin_arns) : toset([])
 
   cluster_name  = aws_eks_cluster.main.name
-  principal_arn = each.value
+  principal_arn = local.admin_entry_arns[each.value]
   type          = "STANDARD"
 
   tags = local.common_tags
@@ -32,7 +47,7 @@ resource "aws_eks_access_policy_association" "admin" {
   for_each = local.access_entries_enabled ? toset(var.cluster_admin_arns) : toset([])
 
   cluster_name  = aws_eks_cluster.main.name
-  principal_arn = each.value
+  principal_arn = local.admin_entry_arns[each.value]
   policy_arn    = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
 
   access_scope {

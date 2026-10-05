@@ -1448,6 +1448,16 @@ variable "cluster_admin_arns" {
   }
 }
 
+variable "sso_instance_region" {
+  description = "Region segment of the IAM path on AWS SSO roles in cluster_admin_arns, used to rebuild the ARN EKS access entries require. Empty (the default) is correct for an IAM Identity Center hosted in us-east-1, which AWS omits the region segment for. Set it to the Identity Center's region otherwise; this need not match var.region."
+  type        = string
+  default     = ""
+  validation {
+    condition     = var.sso_instance_region == "" || can(regex("^[a-z]{2}(-gov)?-[a-z]+-[0-9]$", var.sso_instance_region))
+    error_message = "sso_instance_region must be empty (IAM Identity Center in us-east-1) or an AWS region name, e.g. eu-west-2."
+  }
+}
+
 # ===== Terraform Cloud Agent Configuration =====
 
 variable "tfc_agent_enabled" {
