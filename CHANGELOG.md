@@ -6,6 +6,52 @@ form `aws/platform/vX.Y.Z`.
 
 ## Unreleased
 
+## 0.6.3 — 2026-10-07
+
+### Added
+
+- **`platform_workload_type` / `platform_workload_tolerations`** — repoint the
+  Terraform-managed platform workloads (metrics-server, teleport-kube-agent,
+  cluster-autoscaler, tfc-agent, aws-load-balancer-controller) off the
+  `support` tier, e.g. onto a Karpenter NodePool, whose nodes are tainted and
+  so need a toleration as well as a selector. `platform_workload_tolerations`
+  APPENDS to the `workload-type` toleration each workload carries rather than
+  replacing it, and its `operator`/`effect` are validated at plan time.
+  Defaults (`"support"`, `[]`) keep every existing cluster on `support`.
+  Placement style is unchanged per workload: soft node affinity for
+  metrics-server / teleport-kube-agent / cluster-autoscaler / the LB
+  controller, a hard `nodeSelector` for tfc-agent.
+
+### Changed
+
+- **tfc-agent now carries a `workload-type` toleration** matching its
+  `nodeSelector`. It previously had the selector alone, so pointing it at a
+  tainted node pool left it Pending. Adds one toleration to the pod spec —
+  inert on the untainted `support` group every cluster runs today, but it is
+  a diff on the next apply.
+- **The AWS Load Balancer Controller is now placed** with the same soft node
+  affinity as teleport-kube-agent and cluster-autoscaler. It previously had no
+  placement config. Soft (preferred, not required) so clusters without a
+  `support` node group keep scheduling it.
+
+## 0.6.2 — 2026-10-06
+
+### Added
+
+- **`waf_web_acls[*].label_rules` — act on a label, except on one route.** Blocks
+  (or counts) requests carrying a label an earlier rule emitted, except on URI
+  paths matching `exempt_path_regex`, which the module anchors as `^(…)$`.
+  Paired with a managed rule overridden to `count`, it keeps that rule
+  enforcing everywhere except the route it false-positives on, instead of
+  counting it ACL-wide. Names and priorities share the ACL-wide uniqueness
+  checks; regex syntax is checked at plan. Covered by mocked-provider plan
+  tests (`tests/`), now run in CI. Additive: ACLs without `label_rules` see no
+  diff.
+- **`cluster_autoscaler_scale_down_utilization_threshold`** — sets Cluster
+  Autoscaler's `--scale-down-utilization-threshold`. Defaults to `0.5`, CA's own
+  default, so existing clusters see only the explicit flag added to the Helm
+  release, no behavior change.
+
 ## 0.6.1 — 2026-10-05
 
 ### Fixed

@@ -23,16 +23,30 @@ locals {
   # Soft placement onto support nodes — shared by the teleport-kube-agent and
   # cluster-autoscaler Helm releases (Helm `set` dot-notation entries). Preferred
   # (not required) so clusters without a support node group fall back gracefully.
-  support_node_affinity_set = [
+  # The workload-type toleration is index 0; var.platform_workload_tolerations
+  # appends from index 1, so an override never displaces it.
+  # `type = "string"` on every user-supplied value: Helm coerces an untyped
+  # `set` value, so a legitimate toleration value of "true" or "2" would reach
+  # the chart as a bool/number and fail schema validation. The affinity weight
+  # stays untyped — it is genuinely numeric.
+  support_node_affinity_set = concat([
     { name = "affinity.nodeAffinity.preferredDuringSchedulingIgnoredDuringExecution[0].weight", value = "100" },
-    { name = "affinity.nodeAffinity.preferredDuringSchedulingIgnoredDuringExecution[0].preference.matchExpressions[0].key", value = "workload-type" },
-    { name = "affinity.nodeAffinity.preferredDuringSchedulingIgnoredDuringExecution[0].preference.matchExpressions[0].operator", value = "In" },
-    { name = "affinity.nodeAffinity.preferredDuringSchedulingIgnoredDuringExecution[0].preference.matchExpressions[0].values[0]", value = "support" },
-    { name = "tolerations[0].key", value = "workload-type" },
-    { name = "tolerations[0].operator", value = "Equal" },
-    { name = "tolerations[0].value", value = "support" },
-    { name = "tolerations[0].effect", value = "NoSchedule" },
-  ]
+    { name = "affinity.nodeAffinity.preferredDuringSchedulingIgnoredDuringExecution[0].preference.matchExpressions[0].key", value = "workload-type", type = "string" },
+    { name = "affinity.nodeAffinity.preferredDuringSchedulingIgnoredDuringExecution[0].preference.matchExpressions[0].operator", value = "In", type = "string" },
+    { name = "affinity.nodeAffinity.preferredDuringSchedulingIgnoredDuringExecution[0].preference.matchExpressions[0].values[0]", value = var.platform_workload_type, type = "string" },
+    { name = "tolerations[0].key", value = "workload-type", type = "string" },
+    { name = "tolerations[0].operator", value = "Equal", type = "string" },
+    { name = "tolerations[0].value", value = var.platform_workload_type, type = "string" },
+    { name = "tolerations[0].effect", value = "NoSchedule", type = "string" },
+    ],
+    flatten([
+      for i, t in var.platform_workload_tolerations : [
+        { name = "tolerations[${i + 1}].key", value = t.key, type = "string" },
+        { name = "tolerations[${i + 1}].operator", value = t.operator, type = "string" },
+        { name = "tolerations[${i + 1}].value", value = t.value, type = "string" },
+        { name = "tolerations[${i + 1}].effect", value = t.effect, type = "string" },
+      ]
+  ]))
 
   # Validation logic - will fail at plan time if condition is not met
   validate_teleport = (

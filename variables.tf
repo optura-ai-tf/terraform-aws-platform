@@ -883,6 +883,64 @@ variable "aurora_serverless_max_capacity" {
 
 # ===== AWS Load Balancer Controller =====
 
+# --- Platform workload node placement ---------------------------------------
+# The Terraform-managed platform workloads — metrics-server,
+# teleport-kube-agent, cluster-autoscaler, tfc-agent and the AWS Load Balancer
+# Controller — are placed together on the `support` tier by default, which is
+# what the cluster runs today. Variables so a cluster can repoint them, e.g.
+# onto a Karpenter NodePool, which taints its nodes and therefore needs a
+# TOLERATION as well as a selector.
+#
+# Placement style differs per workload:
+#   metrics-server / teleport-kube-agent / cluster-autoscaler /
+#   aws-load-balancer-controller
+#       soft node affinity (preferred) + toleration, so a cluster with no such
+#       node falls back gracefully instead of going Pending. The LB controller
+#       carried no placement config before this.
+#   tfc-agent
+#       hard nodeSelector, as it has always had, plus a matching toleration.
+
+variable "platform_workload_type" {
+  description = <<-EOT
+    workload-type value the platform workloads are placed on. Defaults to
+    "support", which is current behaviour.
+  EOT
+  type        = string
+  default     = "support"
+}
+
+variable "platform_workload_tolerations" {
+  description = <<-EOT
+    Extra tolerations for the platform workloads, appended to the
+    workload-type toleration they already carry. Needed when the target is a
+    Karpenter NodePool with additional taints. Empty = current behaviour.
+  EOT
+  type = list(object({
+    key      = string
+    operator = optional(string, "Equal")
+    value    = optional(string, "")
+    effect   = optional(string, "NoSchedule")
+  }))
+  default = []
+
+  validation {
+    condition     = alltrue([for t in var.platform_workload_tolerations : contains(["Equal", "Exists"], t.operator)])
+    error_message = "operator must be \"Equal\" or \"Exists\"."
+  }
+
+  validation {
+    # "" is valid and matches every taint effect.
+    condition     = alltrue([for t in var.platform_workload_tolerations : contains(["", "NoSchedule", "PreferNoSchedule", "NoExecute"], t.effect)])
+    error_message = "effect must be empty, \"NoSchedule\", \"PreferNoSchedule\" or \"NoExecute\"."
+  }
+
+  validation {
+    # Kubernetes rejects a non-empty value with operator Exists.
+    condition     = alltrue([for t in var.platform_workload_tolerations : t.operator != "Exists" || t.value == ""])
+    error_message = "a toleration with operator \"Exists\" must leave value empty."
+  }
+}
+
 variable "install_aws_lb_controller" {
   description = "Install AWS Load Balancer Controller via Helm"
   type        = bool
@@ -975,6 +1033,19 @@ variable "waf_web_acls" {
       negate        = optional(bool, false)
     })), [])
 
+    # Act on a label emitted by an earlier rule — typically one rule of a
+    # managed group overridden to count — except on paths matching
+    # exempt_path_regex (anchored by the module as ^(...)$). Scopes a false
+    # positive to one route without counting the rule ACL-wide. Priority must
+    # be after the emitting rule.
+    label_rules = optional(list(object({
+      name              = string
+      priority          = number
+      label             = string
+      action            = optional(string, "block")
+      exempt_path_regex = optional(string)
+    })), [])
+
     associate_resource_arns = optional(list(string), [])
 
     logging = optional(object({
@@ -1024,6 +1095,7 @@ variable "waf_web_acls" {
           [for r in acl.managed_rule_groups : "${coalesce(acl.name, "${var.project_name}-${var.environment}-${k}")}-${r.name}"],
           [for r in acl.ip_rules : "${coalesce(acl.name, "${var.project_name}-${var.environment}-${k}")}-${r.name}"],
           [for r in acl.geo_rules : "${coalesce(acl.name, "${var.project_name}-${var.environment}-${k}")}-${r.name}"],
+          [for r in acl.label_rules : "${coalesce(acl.name, "${var.project_name}-${var.environment}-${k}")}-${r.name}"],
         ) : length(nm) <= 128
       ])
     ])
@@ -1061,14 +1133,16 @@ variable "waf_web_acls" {
         [for r in acl.managed_rule_groups : r.name],
         [for r in acl.ip_rules : r.name],
         [for r in acl.geo_rules : r.name],
+        [for r in acl.label_rules : r.name],
         ))) == length(concat(
         [for r in acl.rate_based_rules : r.name],
         [for r in acl.managed_rule_groups : r.name],
         [for r in acl.ip_rules : r.name],
         [for r in acl.geo_rules : r.name],
+        [for r in acl.label_rules : r.name],
       ))
     ])
-    error_message = "Within each waf_web_acls entry, rule names must be unique across ALL rule kinds (rate_based_rules, managed_rule_groups, ip_rules, geo_rules)."
+    error_message = "Within each waf_web_acls entry, rule names must be unique across ALL rule kinds (rate_based_rules, managed_rule_groups, ip_rules, geo_rules, label_rules)."
   }
 
   # Priorities must be unique across all rule kinds within one ACL.
@@ -1080,11 +1154,13 @@ variable "waf_web_acls" {
         [for r in acl.managed_rule_groups : r.priority],
         [for r in acl.ip_rules : r.priority],
         [for r in acl.geo_rules : r.priority],
+        [for r in acl.label_rules : r.priority],
         ))) == length(concat(
         [for r in acl.rate_based_rules : r.priority],
         [for r in acl.managed_rule_groups : r.priority],
         [for r in acl.ip_rules : r.priority],
         [for r in acl.geo_rules : r.priority],
+        [for r in acl.label_rules : r.priority],
       ))
     ])
     error_message = "Within each waf_web_acls entry, rule priorities must be unique across ALL rule kinds — a Web ACL has a single evaluation-order space."
@@ -1099,6 +1175,7 @@ variable "waf_web_acls" {
           [for r in acl.managed_rule_groups : r.name],
           [for r in acl.ip_rules : r.name],
           [for r in acl.geo_rules : r.name],
+          [for r in acl.label_rules : r.name],
         ) : can(regex("^[a-zA-Z0-9_-]+$", n))
       ])
     ])
@@ -1243,6 +1320,39 @@ variable "waf_web_acls" {
     ])
     error_message = "waf_web_acls[*].managed_rule_groups[*].scope_down.exempt_when_headers names must be unique after lowercasing. WAF matches header names case-insensitively, so e.g. \"Host\" and \"host\" would render two conditions on the same header that can never both match, silently disabling the exemption."
   }
+
+  # ---- label_rules ----
+
+  validation {
+    condition     = alltrue([for k, acl in var.waf_web_acls : alltrue([for r in acl.label_rules : contains(["block", "count"], r.action)])])
+    error_message = "waf_web_acls[*].label_rules[].action must be either \"block\" or \"count\"."
+  }
+
+  validation {
+    condition     = alltrue([for k, acl in var.waf_web_acls : alltrue([for r in acl.label_rules : length(r.label) <= 1024 && can(regex("^[0-9A-Za-z_:-]+$", r.label))])])
+    error_message = "waf_web_acls[*].label_rules[].label must be a full label key such as \"awswaf:managed:aws:core-rule-set:CrossSiteScripting_Body\" (letters, digits, _, - and :)."
+  }
+
+  validation {
+    condition = alltrue([
+      for k, acl in var.waf_web_acls : alltrue([
+        for r in acl.label_rules :
+        r.exempt_path_regex == null ? true : length(r.exempt_path_regex) > 0 && length(r.exempt_path_regex) <= 508
+      ])
+    ])
+    error_message = "waf_web_acls[*].label_rules[].exempt_path_regex must be 1-508 chars (WAF's 512-char regex limit, less the ^(...)$ the module wraps it in)."
+  }
+
+  # regexall errors (rather than returning []) only on bad syntax.
+  validation {
+    condition = alltrue([
+      for k, acl in var.waf_web_acls : alltrue([
+        for r in acl.label_rules :
+        r.exempt_path_regex == null ? true : can(regexall(r.exempt_path_regex, ""))
+      ])
+    ])
+    error_message = "waf_web_acls[*].label_rules[].exempt_path_regex must be a valid regex."
+  }
 }
 
 # ===== Cluster Autoscaler =====
@@ -1257,6 +1367,17 @@ variable "cluster_autoscaler_version" {
   description = "Cluster Autoscaler Helm chart version"
   type        = string
   default     = "9.58.0"
+}
+
+variable "cluster_autoscaler_scale_down_utilization_threshold" {
+  description = "Node CPU/memory request utilization below which Cluster Autoscaler considers the node for scale-down"
+  type        = number
+  default     = 0.5
+
+  validation {
+    condition     = var.cluster_autoscaler_scale_down_utilization_threshold > 0 && var.cluster_autoscaler_scale_down_utilization_threshold <= 1
+    error_message = "cluster_autoscaler_scale_down_utilization_threshold must be in (0, 1]."
+  }
 }
 
 # ===== Storage Configuration =====

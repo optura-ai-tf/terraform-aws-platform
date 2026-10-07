@@ -123,9 +123,25 @@ module "platform" {
       }]
 
       managed_rule_groups = [
-        { name = "AWSManagedRulesCommonRuleSet", priority = 10 },
+        # CrossSiteScripting_BODY -> count so it only emits its label; the
+        # label_rules entry below re-blocks on it outside the upload route.
+        {
+          name     = "AWSManagedRulesCommonRuleSet"
+          priority = 10
+          rule_action_overrides = [
+            { name = "CrossSiteScripting_BODY", action_to_use = "count" },
+          ]
+        },
         { name = "AWSManagedRulesKnownBadInputsRuleSet", priority = 20 },
-        { name = "AWSManagedRulesSQLiRuleSet", priority = 30 },
+        # SQLi_BODY -> count, so the sqli-body-except-import label rule below
+        # gets to run; a blocking emitter would terminate the request first.
+        {
+          name     = "AWSManagedRulesSQLiRuleSet"
+          priority = 30
+          rule_action_overrides = [
+            { name = "SQLi_BODY", action_to_use = "count" },
+          ]
+        },
         { name = "AWSManagedRulesLinuxRuleSet", priority = 40 },
         { name = "AWSManagedRulesUnixRuleSet", priority = 50 },
         { name = "AWSManagedRulesAmazonIpReputationList", priority = 60 },
@@ -149,6 +165,23 @@ module "platform" {
           name       = "AWSManagedRulesAdminProtectionRuleSet"
           priority   = 80
           scope_down = { exempt_when_headers = { "Host" = "admin.example.com" } }
+        },
+      ]
+
+      label_rules = [
+        # Block on the label everywhere except the upload route. The module
+        # anchors the regex as ^(...)$.
+        {
+          name              = "xss-body-except-uploads"
+          priority          = 11
+          label             = "awswaf:managed:aws:core-rule-set:CrossSiteScripting_Body"
+          exempt_path_regex = "/files/[^/]+/upload"
+        },
+        {
+          name              = "sqli-body-except-import"
+          priority          = 31
+          label             = "awswaf:managed:aws:sql-database:SQLi_Body"
+          exempt_path_regex = "/import"
         },
       ]
 

@@ -36,6 +36,10 @@ resource "helm_release" "cluster_autoscaler" {
     {
       name  = "extraArgs.skip-nodes-with-system-pods"
       value = "false"
+    },
+    {
+      name  = "extraArgs.scale-down-utilization-threshold"
+      value = tostring(var.cluster_autoscaler_scale_down_utilization_threshold)
     }
     ],
     # Node scheduling — prefer support nodes (shared with teleport-kube-agent)

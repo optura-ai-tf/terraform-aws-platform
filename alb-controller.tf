@@ -8,7 +8,7 @@ resource "helm_release" "aws_load_balancer_controller" {
   namespace  = "kube-system"
   version    = var.aws_lb_controller_version
 
-  set = [
+  set = concat([
     {
       name  = "clusterName"
       value = aws_eks_cluster.main.name
@@ -37,7 +37,11 @@ resource "helm_release" "aws_load_balancer_controller" {
       name  = "clusterSecretsPermissions.allowAllSecrets"
       value = "true"
     }
-  ]
+    ],
+    # Soft affinity, not a hard nodeSelector: this controller had no placement
+    # before, and clusters without a support node group must keep scheduling.
+    local.support_node_affinity_set
+  )
 
   depends_on = [
     aws_eks_node_group.main,

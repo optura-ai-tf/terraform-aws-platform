@@ -149,7 +149,9 @@ resource "aws_eks_addon" "metrics_server" {
   addon_version               = local.addon_version.metrics_server
   resolve_conflicts_on_update = "PRESERVE"
 
-  # Prefer support nodes (soft) — matches teleport-kube-agent / cluster-autoscaler.
+  # Prefer the platform workload tier (soft) — matches teleport-kube-agent /
+  # cluster-autoscaler. var.platform_workload_tolerations appends to the
+  # workload-type toleration rather than replacing it.
   configuration_values = jsonencode({
     affinity = {
       nodeAffinity = {
@@ -159,18 +161,18 @@ resource "aws_eks_addon" "metrics_server" {
             matchExpressions = [{
               key      = "workload-type"
               operator = "In"
-              values   = ["support"]
+              values   = [var.platform_workload_type]
             }]
           }
         }]
       }
     }
-    tolerations = [{
+    tolerations = concat([{
       key      = "workload-type"
       operator = "Equal"
-      value    = "support"
+      value    = var.platform_workload_type
       effect   = "NoSchedule"
-    }]
+    }], var.platform_workload_tolerations)
   })
 
   tags = local.common_tags

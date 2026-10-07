@@ -117,7 +117,27 @@ resource "kubernetes_deployment" "tfc_agent" {
         service_account_name = kubernetes_service_account.tfc_agent[0].metadata[0].name
 
         node_selector = {
-          "workload-type" = "support"
+          "workload-type" = var.platform_workload_type
+        }
+
+        # Matches the workload-type taint a Karpenter NodePool puts on its
+        # nodes, so the selector above is actually schedulable there. Inert on
+        # an untainted node group, which is what every cluster runs today.
+        toleration {
+          key      = "workload-type"
+          operator = "Equal"
+          value    = var.platform_workload_type
+          effect   = "NoSchedule"
+        }
+
+        dynamic "toleration" {
+          for_each = var.platform_workload_tolerations
+          content {
+            key      = toleration.value.key
+            operator = toleration.value.operator
+            value    = toleration.value.value
+            effect   = toleration.value.effect
+          }
         }
 
         container {

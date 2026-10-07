@@ -387,6 +387,80 @@ resource "aws_wafv2_web_acl" "main" {
     }
   }
 
+  # Match a label emitted by an earlier rule, minus requests whose URI path
+  # matches exempt_path_regex. Paired with a managed rule overridden to count,
+  # this keeps that rule blocking everywhere except the exempted route.
+  dynamic "rule" {
+    for_each = { for r in each.value.label_rules : r.name => r }
+
+    content {
+      name     = rule.value.name
+      priority = rule.value.priority
+
+      action {
+        dynamic "block" {
+          for_each = rule.value.action == "block" ? [1] : []
+          content {}
+        }
+        dynamic "count" {
+          for_each = rule.value.action == "count" ? [1] : []
+          content {}
+        }
+      }
+
+      statement {
+        dynamic "label_match_statement" {
+          for_each = rule.value.exempt_path_regex == null ? [1] : []
+          content {
+            scope = "LABEL"
+            key   = rule.value.label
+          }
+        }
+
+        dynamic "and_statement" {
+          for_each = rule.value.exempt_path_regex == null ? [] : [rule.value.exempt_path_regex]
+
+          content {
+            statement {
+              label_match_statement {
+                scope = "LABEL"
+                key   = rule.value.label
+              }
+            }
+
+            # Anchored here as ^(...)$ so every alternative matches the whole
+            # path. No URL_DECODE: an encoded variant of an exempt path stays
+            # inspected.
+            statement {
+              not_statement {
+                statement {
+                  regex_match_statement {
+                    regex_string = "^(${and_statement.value})$"
+
+                    field_to_match {
+                      uri_path {}
+                    }
+
+                    text_transformation {
+                      priority = 0
+                      type     = "NONE"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+
+      visibility_config {
+        cloudwatch_metrics_enabled = true
+        metric_name                = "${local.waf_acl_name[each.key]}-${rule.value.name}"
+        sampled_requests_enabled   = true
+      }
+    }
+  }
+
   visibility_config {
     cloudwatch_metrics_enabled = true
     metric_name                = local.waf_acl_name[each.key]
