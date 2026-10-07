@@ -6,6 +6,17 @@ form `aws/platform/vX.Y.Z`.
 
 ## Unreleased
 
+## 0.6.4 — 2026-10-07
+
+### Removed
+
+- **`platform_workload_tolerations`** — dropped. The `workload-type` toleration
+  each platform workload carries is already the taint a Karpenter NodePool
+  applies, so the input only duplicated it in the pod spec. Nothing set it to
+  anything else. `platform_workload_type` is unchanged and still selects the
+  tier.
+
+
 ## 0.6.3 — 2026-10-07
 
 ### Added

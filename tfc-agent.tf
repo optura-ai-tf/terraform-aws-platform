@@ -130,15 +130,6 @@ resource "kubernetes_deployment" "tfc_agent" {
           effect   = "NoSchedule"
         }
 
-        dynamic "toleration" {
-          for_each = var.platform_workload_tolerations
-          content {
-            key      = toleration.value.key
-            operator = toleration.value.operator
-            value    = toleration.value.value
-            effect   = toleration.value.effect
-          }
-        }
 
         container {
           name  = "tfc-agent"

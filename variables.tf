@@ -883,22 +883,10 @@ variable "aurora_serverless_max_capacity" {
 
 # ===== AWS Load Balancer Controller =====
 
-# --- Platform workload node placement ---------------------------------------
-# The Terraform-managed platform workloads — metrics-server,
-# teleport-kube-agent, cluster-autoscaler, tfc-agent and the AWS Load Balancer
-# Controller — are placed together on the `support` tier by default, which is
-# what the cluster runs today. Variables so a cluster can repoint them, e.g.
-# onto a Karpenter NodePool, which taints its nodes and therefore needs a
-# TOLERATION as well as a selector.
-#
-# Placement style differs per workload:
-#   metrics-server / teleport-kube-agent / cluster-autoscaler /
-#   aws-load-balancer-controller
-#       soft node affinity (preferred) + toleration, so a cluster with no such
-#       node falls back gracefully instead of going Pending. The LB controller
-#       carried no placement config before this.
-#   tfc-agent
-#       hard nodeSelector, as it has always had, plus a matching toleration.
+# Tier the Terraform-managed platform workloads run on: metrics-server,
+# teleport-kube-agent, cluster-autoscaler, tfc-agent, aws-load-balancer-controller.
+# Each also gets a matching workload-type toleration, so the tier works tainted
+# (Karpenter NodePool) or not (EKS managed group).
 
 variable "platform_workload_type" {
   description = <<-EOT
@@ -907,38 +895,6 @@ variable "platform_workload_type" {
   EOT
   type        = string
   default     = "support"
-}
-
-variable "platform_workload_tolerations" {
-  description = <<-EOT
-    Extra tolerations for the platform workloads, appended to the
-    workload-type toleration they already carry. Needed when the target is a
-    Karpenter NodePool with additional taints. Empty = current behaviour.
-  EOT
-  type = list(object({
-    key      = string
-    operator = optional(string, "Equal")
-    value    = optional(string, "")
-    effect   = optional(string, "NoSchedule")
-  }))
-  default = []
-
-  validation {
-    condition     = alltrue([for t in var.platform_workload_tolerations : contains(["Equal", "Exists"], t.operator)])
-    error_message = "operator must be \"Equal\" or \"Exists\"."
-  }
-
-  validation {
-    # "" is valid and matches every taint effect.
-    condition     = alltrue([for t in var.platform_workload_tolerations : contains(["", "NoSchedule", "PreferNoSchedule", "NoExecute"], t.effect)])
-    error_message = "effect must be empty, \"NoSchedule\", \"PreferNoSchedule\" or \"NoExecute\"."
-  }
-
-  validation {
-    # Kubernetes rejects a non-empty value with operator Exists.
-    condition     = alltrue([for t in var.platform_workload_tolerations : t.operator != "Exists" || t.value == ""])
-    error_message = "a toleration with operator \"Exists\" must leave value empty."
-  }
 }
 
 variable "install_aws_lb_controller" {
