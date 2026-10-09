@@ -6,6 +6,19 @@ form `aws/platform/vX.Y.Z`.
 
 ## Unreleased
 
+## 0.6.5 — 2026-10-09
+
+### Fixed
+
+- **Karpenter controller: `iam:ListInstanceProfiles`.** The
+  `instanceprofile.garbagecollection` controller lists every instance profile
+  in the account on each reconcile, and the action takes no resource-level
+  permissions, so it cannot be scoped to the module's own profile. Without it
+  that controller logged an `AccessDenied` every reconcile and orphaned
+  profiles were never collected. Read-only and additive — no other behaviour
+  changes.
+
+
 ## 0.6.4 — 2026-10-07
 
 ### Removed

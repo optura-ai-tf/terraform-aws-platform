@@ -204,6 +204,15 @@ resource "aws_iam_policy" "karpenter_controller" {
         Action   = ["iam:GetInstanceProfile"]
         Resource = aws_iam_instance_profile.karpenter_nodes[0].arn
       },
+      {
+        # The instanceprofile.garbagecollection controller lists every profile
+        # in the account each reconcile; iam:ListInstanceProfiles takes no
+        # resource-level permissions, so it cannot be scoped. Read-only.
+        Sid      = "ListInstanceProfiles"
+        Effect   = "Allow"
+        Action   = ["iam:ListInstanceProfiles"]
+        Resource = "*"
+      },
     ]
   })
 
