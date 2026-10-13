@@ -319,6 +319,12 @@ variable "cni_prefix_delegation_enabled" {
   default     = true
 }
 
+variable "cni_network_policy_enabled" {
+  description = "Enable Kubernetes NetworkPolicy enforcement in the VPC CNI. Without it the API server accepts NetworkPolicy objects and the aws-eks-nodeagent silently enforces nothing, so isolation fails open. Defaults false to preserve existing clusters: turning it on where no policies exist is a no-op, but turning it on alongside a default-deny policy cuts traffic immediately."
+  type        = bool
+  default     = false
+}
+
 variable "single_nat_gateway" {
   description = "Use single NAT Gateway (cost savings for dev)"
   type        = bool

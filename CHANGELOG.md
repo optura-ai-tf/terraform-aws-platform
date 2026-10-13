@@ -6,6 +6,19 @@ form `aws/platform/vX.Y.Z`.
 
 ## Unreleased
 
+## 0.6.6 — 2026-10-13
+
+### Added
+
+- **`cni_network_policy_enabled`** turns on Kubernetes NetworkPolicy
+  enforcement in the VPC CNI (`enableNetworkPolicy`). Without it the API server
+  accepts NetworkPolicy objects and the `aws-eks-nodeagent` enforces nothing, so
+  isolation fails open with no error anywhere. Defaults false, so existing
+  clusters are unchanged: `configuration_values` still resolves to null when no
+  CNI feature is set. Enable it only once the namespaces that need policies
+  have them, since a default-deny starts cutting traffic the moment enforcement
+  comes on.
+
 ## 0.6.5 — 2026-10-09
 
 ### Fixed

@@ -28,6 +28,11 @@ locals {
     } : {},
   )
 
+  vpc_cni_config = merge(
+    length(local.vpc_cni_env) > 0 ? { env = local.vpc_cni_env } : {},
+    var.cni_network_policy_enabled ? { enableNetworkPolicy = "true" } : {},
+  )
+
   # Resolve each add-on version once: an explicit pin from var.eks_addon_versions
   # wins; otherwise the most-recent version for the cluster's Kubernetes version.
   # (pod_identity_agent is resolved inline — its data source is count-gated.)
@@ -46,7 +51,7 @@ resource "aws_eks_addon" "vpc_cni" {
   addon_version               = local.addon_version.vpc_cni
   resolve_conflicts_on_update = "PRESERVE"
 
-  configuration_values = length(local.vpc_cni_env) > 0 ? jsonencode({ env = local.vpc_cni_env }) : null
+  configuration_values = length(local.vpc_cni_config) > 0 ? jsonencode(local.vpc_cni_config) : null
 
   tags = local.common_tags
 }
