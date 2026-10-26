@@ -6,6 +6,21 @@ form `aws/platform/vX.Y.Z`.
 
 ## Unreleased
 
+## 0.6.7 — 2026-10-26
+
+### Added
+
+- **`effect` and `conditions` on `policy_statements`** in `pod_identity_roles`
+  and `irsa_roles`. `effect` is `"Allow"` (the default) or `"Deny"`;
+  `conditions` is a list of `{ test, variable, values }` blocks, the same shape
+  as `aws_iam_policy_document`, rendered as `Condition[test][variable]`. A Deny
+  caps what a role can do whatever else allows it, e.g. a
+  `ForAnyValue:StringNotLike` on `ses:Recipients` that keeps a non-prod sender
+  to internal addresses. Statements that set neither render exactly as before
+  (Allow, no `Condition` key), so existing roles plan with no diff. An unknown
+  effect, an empty condition, or a `(test, variable)` pair repeated within one
+  statement is refused at plan.
+
 ## 0.6.6 — 2026-10-13
 
 ### Added

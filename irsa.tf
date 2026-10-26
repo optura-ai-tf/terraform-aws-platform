@@ -70,7 +70,8 @@ resource "aws_iam_role" "irsa" {
 }
 
 # --- IAM Policy per service ---
-# Permissions are defined by the entry's policy_statements.
+# Permissions are defined by the entry's policy_statements; a Deny statement
+# caps what the role can do regardless of any Allow.
 
 resource "aws_iam_policy" "irsa" {
   for_each = var.irsa_roles
@@ -81,12 +82,23 @@ resource "aws_iam_policy" "irsa" {
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
-      for stmt in each.value.policy_statements : {
-        Sid      = stmt.sid
-        Effect   = "Allow"
-        Action   = stmt.actions
-        Resource = stmt.resources
-      }
+      for stmt in each.value.policy_statements : merge(
+        {
+          Sid      = stmt.sid
+          Effect   = stmt.effect
+          Action   = stmt.actions
+          Resource = stmt.resources
+        },
+        # Omitted rather than null when empty, so statements without
+        # conditions render exactly as before and existing policies see no diff.
+        length(stmt.conditions) > 0 ? {
+          Condition = {
+            for test in distinct(stmt.conditions[*].test) : test => {
+              for c in stmt.conditions : c.variable => c.values if c.test == test
+            }
+          }
+        } : {}
+      )
     ]
   })
 

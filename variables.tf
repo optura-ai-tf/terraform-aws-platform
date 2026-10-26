@@ -1604,6 +1604,26 @@ variable "pod_identity_roles" {
     service_account) — wildcards are not supported by the AWS API.
     For wildcard namespace matching, use irsa_roles instead.
 
+    Each policy_statements entry may also set `effect` ("Allow", the
+    default, or "Deny") and `conditions`, a list of IAM condition
+    blocks shaped like aws_iam_policy_document's (`test`, `variable`,
+    `values`). Distinct conditions in one statement must all hold. A
+    Deny statement overrides any Allow on the role, so it caps what
+    the role can do — e.g. sending SES mail only to internal
+    recipients:
+
+      {
+        sid       = "DenyExternalRecipients"
+        effect    = "Deny"
+        actions   = ["ses:SendEmail", "ses:SendRawEmail"]
+        resources = ["*"]
+        conditions = [{
+          test     = "ForAnyValue:StringNotLike"
+          variable = "ses:Recipients"
+          values   = ["*@example.com"]
+        }]
+      }
+
     Independent of irsa_roles — both may be populated on the same
     cluster. A non-empty map also installs the Pod Identity Agent addon.
   EOT
@@ -1613,8 +1633,14 @@ variable "pod_identity_roles" {
     role_arn        = optional(string)
     policy_statements = optional(list(object({
       sid       = string
+      effect    = optional(string, "Allow")
       actions   = list(string)
       resources = list(string)
+      conditions = optional(list(object({
+        test     = string
+        variable = string
+        values   = list(string)
+      })), [])
     })), [])
   }))
   default = {}
@@ -1643,6 +1669,27 @@ variable "pod_identity_roles" {
   validation {
     condition     = alltrue([for k, v in var.pod_identity_roles : alltrue([for s in v.policy_statements : length(s.actions) > 0 && length(s.resources) > 0])])
     error_message = "pod_identity_roles[].policy_statements[].actions and .resources must each be non-empty (IAM rejects empty Action/Resource arrays as MalformedPolicyDocument at apply time)."
+  }
+
+  validation {
+    condition     = alltrue([for k, v in var.pod_identity_roles : alltrue([for s in v.policy_statements : contains(["Allow", "Deny"], s.effect)])])
+    error_message = "pod_identity_roles[].policy_statements[].effect must be \"Allow\" or \"Deny\" (IAM is case-sensitive here)."
+  }
+
+  validation {
+    condition = alltrue([for k, v in var.pod_identity_roles : alltrue([for s in v.policy_statements : alltrue([
+      for c in s.conditions : length(c.test) > 0 && length(c.variable) > 0 && length(c.values) > 0
+    ])])])
+    error_message = "pod_identity_roles[].policy_statements[].conditions[] must each set a non-empty test, variable and values (IAM rejects an empty condition as MalformedPolicyDocument at apply time)."
+  }
+
+  validation {
+    # The policy groups conditions as Condition[test][variable], so a repeated
+    # pair would be a duplicate object key: an opaque error at plan.
+    condition = alltrue([for k, v in var.pod_identity_roles : alltrue([for s in v.policy_statements :
+      length(distinct([for c in s.conditions : "${c.test}\n${c.variable}"])) == length(s.conditions)
+    ])])
+    error_message = "pod_identity_roles[].policy_statements[].conditions must not repeat a (test, variable) pair within one statement; put all values for that pair in one entry's values list."
   }
 
   validation {
@@ -1687,6 +1734,9 @@ variable "irsa_roles" {
     character. Example values: "core" (exact match), "tenant-*",
     "*-prod".
 
+    policy_statements entries accept the same optional `effect` and
+    `conditions` as pod_identity_roles.
+
     Independent of pod_identity_roles — both may be populated on the
     same cluster.
   EOT
@@ -1695,8 +1745,14 @@ variable "irsa_roles" {
     service_account   = string
     policy_statements = list(object({
       sid       = string
+      effect    = optional(string, "Allow")
       actions   = list(string)
       resources = list(string)
+      conditions = optional(list(object({
+        test     = string
+        variable = string
+        values   = list(string)
+      })), [])
     }))
   }))
   default = {}
@@ -1714,6 +1770,27 @@ variable "irsa_roles" {
   validation {
     condition     = alltrue([for k, v in var.irsa_roles : alltrue([for s in v.policy_statements : length(s.actions) > 0 && length(s.resources) > 0])])
     error_message = "irsa_roles[].policy_statements[].actions and .resources must each be non-empty (IAM rejects empty Action/Resource arrays as MalformedPolicyDocument at apply time)."
+  }
+
+  validation {
+    condition     = alltrue([for k, v in var.irsa_roles : alltrue([for s in v.policy_statements : contains(["Allow", "Deny"], s.effect)])])
+    error_message = "irsa_roles[].policy_statements[].effect must be \"Allow\" or \"Deny\" (IAM is case-sensitive here)."
+  }
+
+  validation {
+    condition = alltrue([for k, v in var.irsa_roles : alltrue([for s in v.policy_statements : alltrue([
+      for c in s.conditions : length(c.test) > 0 && length(c.variable) > 0 && length(c.values) > 0
+    ])])])
+    error_message = "irsa_roles[].policy_statements[].conditions[] must each set a non-empty test, variable and values (IAM rejects an empty condition as MalformedPolicyDocument at apply time)."
+  }
+
+  validation {
+    # The policy groups conditions as Condition[test][variable], so a repeated
+    # pair would be a duplicate object key: an opaque error at plan.
+    condition = alltrue([for k, v in var.irsa_roles : alltrue([for s in v.policy_statements :
+      length(distinct([for c in s.conditions : "${c.test}\n${c.variable}"])) == length(s.conditions)
+    ])])
+    error_message = "irsa_roles[].policy_statements[].conditions must not repeat a (test, variable) pair within one statement; put all values for that pair in one entry's values list."
   }
 
   validation {
