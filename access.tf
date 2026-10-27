@@ -61,84 +61,120 @@ resource "terraform_data" "teleport_validation" {
 # ===== SECTION 1: User-Facing RBAC Roles =====
 
 ## Role 1: Cluster Admin (Full Access)
-resource "kubernetes_cluster_role" "teleport_admin" {
+resource "kubectl_manifest" "teleport_admin_role" {
   count = var.access_mode == "teleport" ? 1 : 0
-  metadata {
-    name = "teleport-cluster-admin"
-    labels = {
-      "app.kubernetes.io/managed-by" = "terraform"
-      "teleport.dev/role"            = "admin"
+
+  server_side_apply = true
+  force_conflicts   = true
+  yaml_body = yamlencode({
+    apiVersion = "rbac.authorization.k8s.io/v1"
+    kind       = "ClusterRole"
+    metadata = {
+      name = "teleport-cluster-admin"
+      labels = {
+        "app.kubernetes.io/managed-by" = "terraform"
+        "teleport.dev/role"            = "admin"
+      }
     }
-  }
-  rule {
-    api_groups = ["*"]
-    resources  = ["*"]
-    verbs      = ["*"]
-  }
-  rule {
-    non_resource_urls = ["*"]
-    verbs             = ["*"]
-  }
+    rules = [
+      {
+        apiGroups = ["*"]
+        resources = ["*"]
+        verbs     = ["*"]
+      },
+      {
+        nonResourceURLs = ["*"]
+        verbs           = ["*"]
+      },
+    ]
+  })
 }
 
-resource "kubernetes_cluster_role_binding" "teleport_admin" {
+resource "kubectl_manifest" "teleport_admin_binding" {
   count = var.access_mode == "teleport" ? 1 : 0
-  metadata {
-    name = "teleport-cluster-admin"
-  }
-  role_ref {
-    api_group = "rbac.authorization.k8s.io"
-    kind      = "ClusterRole"
-    name      = kubernetes_cluster_role.teleport_admin[0].metadata[0].name
-  }
-  subject {
-    kind      = "Group"
-    name      = "teleport-admins"
-    api_group = "rbac.authorization.k8s.io"
-  }
+
+  server_side_apply = true
+  force_conflicts   = true
+  yaml_body = yamlencode({
+    apiVersion = "rbac.authorization.k8s.io/v1"
+    kind       = "ClusterRoleBinding"
+    metadata = {
+      name = "teleport-cluster-admin"
+    }
+    roleRef = {
+      apiGroup = "rbac.authorization.k8s.io"
+      kind     = "ClusterRole"
+      name     = "teleport-cluster-admin"
+    }
+    subjects = [{
+      kind     = "Group"
+      name     = "teleport-admins"
+      apiGroup = "rbac.authorization.k8s.io"
+    }]
+  })
+
+  depends_on = [kubectl_manifest.teleport_admin_role]
 }
 
 ## Role 2: Viewer (Read-Only)
-resource "kubernetes_cluster_role" "teleport_viewer" {
+resource "kubectl_manifest" "teleport_viewer_role" {
   count = var.access_mode == "teleport" ? 1 : 0
-  metadata {
-    name = "teleport-viewer"
-  }
-  rule {
-    api_groups = ["", "apps", "batch", "extensions"]
-    resources = [
-      "pods", "pods/log", "pods/status",
-      "services", "endpoints",
-      "deployments", "replicasets", "statefulsets", "daemonsets",
-      "jobs", "cronjobs",
-      "configmaps", "secrets",
-      "persistentvolumes", "persistentvolumeclaims",
-      "namespaces", "nodes"
+
+  server_side_apply = true
+  force_conflicts   = true
+  yaml_body = yamlencode({
+    apiVersion = "rbac.authorization.k8s.io/v1"
+    kind       = "ClusterRole"
+    metadata = {
+      name = "teleport-viewer"
+    }
+    rules = [
+      {
+        apiGroups = ["", "apps", "batch", "extensions"]
+        resources = [
+          "pods", "pods/log", "pods/status",
+          "services", "endpoints",
+          "deployments", "replicasets", "statefulsets", "daemonsets",
+          "jobs", "cronjobs",
+          "configmaps", "secrets",
+          "persistentvolumes", "persistentvolumeclaims",
+          "namespaces", "nodes"
+        ]
+        verbs = ["get", "list", "watch"]
+      },
+      {
+        apiGroups = ["rbac.authorization.k8s.io"]
+        resources = ["roles", "rolebindings", "clusterroles", "clusterrolebindings"]
+        verbs     = ["get", "list", "watch"]
+      },
     ]
-    verbs = ["get", "list", "watch"]
-  }
-  rule {
-    api_groups = ["rbac.authorization.k8s.io"]
-    resources  = ["roles", "rolebindings", "clusterroles", "clusterrolebindings"]
-    verbs      = ["get", "list", "watch"]
-  }
+  })
 }
 
-resource "kubernetes_cluster_role_binding" "teleport_viewer" {
+resource "kubectl_manifest" "teleport_viewer_binding" {
   count = var.access_mode == "teleport" ? 1 : 0
-  metadata {
-    name = "teleport-viewer"
-  }
-  role_ref {
-    api_group = "rbac.authorization.k8s.io"
-    kind      = "ClusterRole"
-    name      = kubernetes_cluster_role.teleport_viewer[0].metadata[0].name
-  }
-  subject {
-    kind      = "Group"
-    name      = "teleport-viewers"
-    api_group = "rbac.authorization.k8s.io"
-  }
+
+  server_side_apply = true
+  force_conflicts   = true
+  yaml_body = yamlencode({
+    apiVersion = "rbac.authorization.k8s.io/v1"
+    kind       = "ClusterRoleBinding"
+    metadata = {
+      name = "teleport-viewer"
+    }
+    roleRef = {
+      apiGroup = "rbac.authorization.k8s.io"
+      kind     = "ClusterRole"
+      name     = "teleport-viewer"
+    }
+    subjects = [{
+      kind     = "Group"
+      name     = "teleport-viewers"
+      apiGroup = "rbac.authorization.k8s.io"
+    }]
+  })
+
+  depends_on = [kubectl_manifest.teleport_viewer_role]
 }
 
 # ===== SECTION 2: Teleport Agent via Helm =====

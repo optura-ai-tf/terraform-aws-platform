@@ -321,17 +321,10 @@ resource "aws_iam_role_policy_attachment" "rds_monitoring" {
 #
 # ===================================================================
 
-# ConfigMap containing SQL script to grant rds_iam role (per-server)
-resource "kubernetes_config_map" "rds_iam_setup" {
-  for_each = var.rds_enabled ? var.databases : {}
-
-  metadata {
-    name      = "rds-iam-setup-${var.environment}${local.db_name_suffix[each.key]}"
-    namespace = "kube-system"
-  }
-
-  data = {
-    "setup.sql" = <<-SQL
+locals {
+  rds_iam_setup_names       = { for k in keys(var.databases) : k => "rds-iam-setup-${var.environment}${local.db_name_suffix[k]}" }
+  rds_bootstrap_creds_names = { for k in keys(var.databases) : k => "rds-bootstrap-credentials-${var.environment}${local.db_name_suffix[k]}" }
+  rds_iam_setup_sql         = <<-SQL
       -- Create dedicated user for Teleport database access
       -- This user will have CREATEROLE permission for auto-provisioning
       -- Commands are idempotent (safe to run multiple times)
@@ -366,28 +359,50 @@ resource "kubernetes_config_map" "rds_iam_setup" {
       LEFT JOIN pg_roles m ON am.roleid = m.oid
       WHERE r.rolname = 'teleport_admin'
       GROUP BY r.rolname, r.rolcanlogin, r.rolcreaterole;
-    SQL
-  }
+  SQL
+}
+
+# ConfigMap containing SQL script to grant rds_iam role (per-server)
+resource "kubectl_manifest" "rds_iam_setup" {
+  for_each = var.rds_enabled ? var.databases : {}
+
+  server_side_apply = true
+  force_conflicts   = true
+  yaml_body = yamlencode({
+    apiVersion = "v1"
+    kind       = "ConfigMap"
+    metadata = {
+      name      = local.rds_iam_setup_names[each.key]
+      namespace = "kube-system"
+    }
+    data = {
+      "setup.sql" = local.rds_iam_setup_sql
+    }
+  })
 
   depends_on = [aws_db_instance.postgresql, aws_rds_cluster_instance.aurora]
 }
 
 # Secret containing database credentials for bootstrap connection (per-server)
-resource "kubernetes_secret" "rds_bootstrap_creds" {
+resource "kubectl_manifest" "rds_bootstrap_creds" {
   for_each = var.rds_enabled ? var.databases : {}
 
-  metadata {
-    name      = "rds-bootstrap-credentials-${var.environment}${local.db_name_suffix[each.key]}"
-    namespace = "kube-system"
-  }
-
-  data = {
-    username = coalesce(each.value.admin_username, var.rds_admin_username)
-    password = random_password.rds[each.key].result
-    host     = local.db_hosts[each.key]
-  }
-
-  type = "Opaque"
+  server_side_apply = true
+  force_conflicts   = true
+  yaml_body = yamlencode({
+    apiVersion = "v1"
+    kind       = "Secret"
+    type       = "Opaque"
+    metadata = {
+      name      = local.rds_bootstrap_creds_names[each.key]
+      namespace = "kube-system"
+    }
+    data = {
+      username = base64encode(coalesce(each.value.admin_username, var.rds_admin_username))
+      password = base64encode(random_password.rds[each.key].result)
+      host     = base64encode(local.db_hosts[each.key])
+    }
+  })
 
   depends_on = [aws_db_instance.postgresql, aws_rds_cluster_instance.aurora]
 }
@@ -410,7 +425,7 @@ resource "terraform_data" "rds_iam_setup_hash" {
   # host in the trigger, an already-completed Job would never re-apply the IAM
   # grants / teleport_admin role on the new engine.
   triggers_replace = [
-    sha256(kubernetes_config_map.rds_iam_setup[each.key].data["setup.sql"]),
+    sha256(local.rds_iam_setup_sql),
     local.db_hosts[each.key],
   ]
 }
@@ -478,7 +493,7 @@ resource "kubernetes_job_v1" "rds_iam_bootstrap" {
             name = "PGHOST"
             value_from {
               secret_key_ref {
-                name = kubernetes_secret.rds_bootstrap_creds[each.key].metadata[0].name
+                name = local.rds_bootstrap_creds_names[each.key]
                 key  = "host"
               }
             }
@@ -488,7 +503,7 @@ resource "kubernetes_job_v1" "rds_iam_bootstrap" {
             name = "PGUSER"
             value_from {
               secret_key_ref {
-                name = kubernetes_secret.rds_bootstrap_creds[each.key].metadata[0].name
+                name = local.rds_bootstrap_creds_names[each.key]
                 key  = "username"
               }
             }
@@ -498,7 +513,7 @@ resource "kubernetes_job_v1" "rds_iam_bootstrap" {
             name = "PGPASSWORD"
             value_from {
               secret_key_ref {
-                name = kubernetes_secret.rds_bootstrap_creds[each.key].metadata[0].name
+                name = local.rds_bootstrap_creds_names[each.key]
                 key  = "password"
               }
             }
@@ -535,7 +550,7 @@ resource "kubernetes_job_v1" "rds_iam_bootstrap" {
         volume {
           name = "scripts"
           config_map {
-            name = kubernetes_config_map.rds_iam_setup[each.key].metadata[0].name
+            name = local.rds_iam_setup_names[each.key]
           }
         }
 
@@ -574,8 +589,8 @@ resource "kubernetes_job_v1" "rds_iam_bootstrap" {
     aws_eks_node_group.main,
     aws_db_instance.postgresql,
     aws_rds_cluster_instance.aurora,
-    kubernetes_config_map.rds_iam_setup,
-    kubernetes_secret.rds_bootstrap_creds
+    kubectl_manifest.rds_iam_setup,
+    kubectl_manifest.rds_bootstrap_creds,
   ]
 
   # Re-run the Job whenever the SQL hash changes. See `terraform_data.rds_iam_setup_hash`

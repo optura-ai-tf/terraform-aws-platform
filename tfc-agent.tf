@@ -21,158 +21,182 @@ resource "terraform_data" "tfc_agent_validation" {
 
 # ===== TFC Agent Resources =====
 
+locals {
+  tfc_agent_namespace = "terraform-cloud"
+}
+
 # Create namespace for TFC Agent
-resource "kubernetes_namespace" "tfc_agent" {
+resource "kubectl_manifest" "tfc_agent_namespace" {
   count = var.tfc_agent_enabled ? 1 : 0
 
-  metadata {
-    name = "terraform-cloud"
-  }
+  server_side_apply = true
+  force_conflicts   = true
+  yaml_body = yamlencode({
+    apiVersion = "v1"
+    kind       = "Namespace"
+    metadata = {
+      name = local.tfc_agent_namespace
+    }
+  })
 }
 
 # ServiceAccount for TFC Agent
 # This SA is used by the agent pod and needs cluster-admin for Terraform to manage K8s resources
-resource "kubernetes_service_account" "tfc_agent" {
+resource "kubectl_manifest" "tfc_agent_service_account" {
   count = var.tfc_agent_enabled ? 1 : 0
 
-  metadata {
-    name      = "tfc-agent"
-    namespace = kubernetes_namespace.tfc_agent[0].metadata[0].name
-  }
+  server_side_apply = true
+  force_conflicts   = true
+  yaml_body = yamlencode({
+    apiVersion = "v1"
+    kind       = "ServiceAccount"
+    metadata = {
+      name      = "tfc-agent"
+      namespace = local.tfc_agent_namespace
+    }
+  })
 
-  depends_on = [kubernetes_namespace.tfc_agent]
+  depends_on = [kubectl_manifest.tfc_agent_namespace]
 }
 
 # ClusterRoleBinding for TFC Agent
 # Grants cluster-admin to the TFC agent SA so Terraform can manage all K8s resources
-resource "kubernetes_cluster_role_binding" "tfc_agent" {
+resource "kubectl_manifest" "tfc_agent_cluster_role_binding" {
   count = var.tfc_agent_enabled ? 1 : 0
 
-  metadata {
-    name = "tfc-agent-cluster-admin"
-  }
+  server_side_apply = true
+  force_conflicts   = true
+  yaml_body = yamlencode({
+    apiVersion = "rbac.authorization.k8s.io/v1"
+    kind       = "ClusterRoleBinding"
+    metadata = {
+      name = "tfc-agent-cluster-admin"
+    }
+    roleRef = {
+      apiGroup = "rbac.authorization.k8s.io"
+      kind     = "ClusterRole"
+      name     = "cluster-admin"
+    }
+    subjects = [{
+      kind      = "ServiceAccount"
+      name      = "tfc-agent"
+      namespace = local.tfc_agent_namespace
+    }]
+  })
 
-  role_ref {
-    api_group = "rbac.authorization.k8s.io"
-    kind      = "ClusterRole"
-    name      = "cluster-admin"
-  }
-
-  subject {
-    kind      = "ServiceAccount"
-    name      = kubernetes_service_account.tfc_agent[0].metadata[0].name
-    namespace = kubernetes_namespace.tfc_agent[0].metadata[0].name
-  }
-
-  depends_on = [kubernetes_service_account.tfc_agent]
+  depends_on = [kubectl_manifest.tfc_agent_service_account]
 }
 
 # Kubernetes Secret for TFC Agent token
-resource "kubernetes_secret" "tfc_agent_token" {
+resource "kubectl_manifest" "tfc_agent_token" {
   count = var.tfc_agent_enabled ? 1 : 0
 
-  metadata {
-    name      = "tfc-agent-token"
-    namespace = kubernetes_namespace.tfc_agent[0].metadata[0].name
-  }
+  server_side_apply = true
+  force_conflicts   = true
+  yaml_body = yamlencode({
+    apiVersion = "v1"
+    kind       = "Secret"
+    type       = "Opaque"
+    metadata = {
+      name      = "tfc-agent-token"
+      namespace = local.tfc_agent_namespace
+    }
+    data = {
+      token = base64encode(var.tfc_agent_token)
+    }
+  })
 
-  data = {
-    token = var.tfc_agent_token
-  }
-
-  depends_on = [
-    kubernetes_namespace.tfc_agent,
-  ]
+  depends_on = [kubectl_manifest.tfc_agent_namespace]
 }
 
 # TFC Agent Deployment
-resource "kubernetes_deployment" "tfc_agent" {
+resource "kubectl_manifest" "tfc_agent" {
   count = var.tfc_agent_enabled ? 1 : 0
 
-  metadata {
-    name      = "tfc-agent"
-    namespace = kubernetes_namespace.tfc_agent[0].metadata[0].name
-    labels = {
-      app = "tfc-agent"
-    }
-  }
-
-  spec {
-    replicas = 1
-
-    selector {
-      match_labels = {
+  server_side_apply = true
+  force_conflicts   = true
+  yaml_body = yamlencode({
+    apiVersion = "apps/v1"
+    kind       = "Deployment"
+    metadata = {
+      name      = "tfc-agent"
+      namespace = local.tfc_agent_namespace
+      labels = {
         app = "tfc-agent"
       }
     }
-
-    template {
-      metadata {
-        labels = {
+    spec = {
+      replicas = 1
+      selector = {
+        matchLabels = {
           app = "tfc-agent"
         }
       }
-
-      spec {
-        service_account_name = kubernetes_service_account.tfc_agent[0].metadata[0].name
-
-        node_selector = {
-          "workload-type" = var.platform_workload_type
+      template = {
+        metadata = {
+          labels = {
+            app = "tfc-agent"
+          }
         }
-
-        # Matches the workload-type taint a Karpenter NodePool puts on its
-        # nodes, so the selector above is actually schedulable there. Inert on
-        # an untainted node group, which is what every cluster runs today.
-        toleration {
-          key      = "workload-type"
-          operator = "Equal"
-          value    = var.platform_workload_type
-          effect   = "NoSchedule"
-        }
-
-
-        container {
-          name  = "tfc-agent"
-          image = "hashicorp/tfc-agent:${var.tfc_agent_version}"
-
-          env {
-            name = "TFC_AGENT_TOKEN"
-            value_from {
-              secret_key_ref {
-                name = kubernetes_secret.tfc_agent_token[0].metadata[0].name
-                key  = "token"
+        spec = {
+          serviceAccountName = "tfc-agent"
+          nodeSelector = {
+            "workload-type" = var.platform_workload_type
+          }
+          # Matches the workload-type taint a Karpenter NodePool puts on its
+          # nodes, so the selector above is actually schedulable there. Inert on
+          # an untainted node group, which is what every cluster runs today.
+          tolerations = [{
+            key      = "workload-type"
+            operator = "Equal"
+            value    = var.platform_workload_type
+            effect   = "NoSchedule"
+          }]
+          containers = [{
+            name  = "tfc-agent"
+            image = "hashicorp/tfc-agent:${var.tfc_agent_version}"
+            env = [
+              {
+                name = "TFC_AGENT_TOKEN"
+                valueFrom = {
+                  # optional = false matches what kubernetes_deployment set, so
+                  # taking over an existing agent doesn't roll its pod.
+                  secretKeyRef = {
+                    name     = "tfc-agent-token"
+                    key      = "token"
+                    optional = false
+                  }
+                }
+              },
+              # Use pod name for unique agent naming (includes random suffix)
+              {
+                name = "TFC_AGENT_NAME"
+                valueFrom = {
+                  fieldRef = {
+                    fieldPath = "metadata.name"
+                  }
+                }
+              },
+            ]
+            resources = {
+              requests = {
+                cpu    = "250m"
+                memory = "512Mi"
+              }
+              limits = {
+                cpu    = "1000m"
+                memory = "2Gi"
               }
             }
-          }
-
-          # Use pod name for unique agent naming (includes random suffix)
-          env {
-            name = "TFC_AGENT_NAME"
-            value_from {
-              field_ref {
-                field_path = "metadata.name"
-              }
-            }
-          }
-
-          resources {
-            requests = {
-              cpu    = "250m"
-              memory = "512Mi"
-            }
-            limits = {
-              cpu    = "1000m"
-              memory = "2Gi"
-            }
-          }
+          }]
         }
       }
     }
-  }
+  })
 
   depends_on = [
     aws_eks_node_group.main,
-    kubernetes_secret.tfc_agent_token,
-    kubernetes_cluster_role_binding.tfc_agent,
+    kubectl_manifest.tfc_agent_token,
+    kubectl_manifest.tfc_agent_cluster_role_binding,
   ]
 }

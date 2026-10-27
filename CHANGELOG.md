@@ -6,6 +6,42 @@ form `aws/platform/vX.Y.Z`.
 
 ## Unreleased
 
+## 0.7.0 — 2026-10-27
+
+### Changed
+
+- **Deprecated `kubernetes_*` resources replaced with `kubectl_manifest`**
+  (the tfc-agent namespace, service account, binding, token secret and
+  deployment, the Teleport cluster roles and bindings, and the RDS bootstrap
+  config maps and secrets), clearing the provider's deprecation warnings on
+  every plan. The provider can't move state from these types to their `_v1`
+  equivalents, so `moved.tf` drops the old addresses (`removed`, `destroy =
+  false`) and each `kubectl_manifest` takes over the existing object with
+  server side apply. No root changes are needed and nothing in the cluster is
+  recreated or restarted: the plan shows the old addresses leaving state and
+  the new ones as creates. Object names, contents and the tfc-agent pod spec
+  are unchanged, and the RDS bootstrap Job is not re-run.
+
+  Upgrade with your current `tfc_agent_enabled`, `access_mode`,
+  `rds_enabled` and `databases` settings, and change them in a later apply.
+  Turned off in the same apply, the old objects leave state without being
+  deleted, including the agent's `cluster-admin` binding. To clean up after
+  doing that, run only the commands for what you turned off:
+
+  ```sh
+  # tfc_agent_enabled = false
+  kubectl delete namespace terraform-cloud
+  kubectl delete clusterrolebinding tfc-agent-cluster-admin
+
+  # access_mode changed from "teleport"
+  kubectl delete clusterrolebinding teleport-cluster-admin teleport-viewer
+  kubectl delete clusterrole teleport-cluster-admin teleport-viewer
+
+  # rds_enabled = false (every databases key), or a key removed from databases
+  kubectl -n kube-system delete configmap rds-iam-setup-<environment>[-<db key>]
+  kubectl -n kube-system delete secret rds-bootstrap-credentials-<environment>[-<db key>]
+  ```
+
 ## 0.6.7 — 2026-10-26
 
 ### Added
